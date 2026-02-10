@@ -9,7 +9,7 @@ import streamlit as st
 
 
 # ------------------ API ------------------
-API_BASE = "http://localhost:4000"
+API_BASE = "http://localhost:8501"
 REGISTER_URL = f"{API_BASE}/api/auth/register"
 
 
