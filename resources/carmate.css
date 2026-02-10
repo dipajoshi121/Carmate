@@ -1,0 +1,66 @@
+/* Bigger Create Account button */
+div[data-testid="stFormSubmitButton"] > button {
+  font-size: 18px !important;
+  padding: 12px 22px !important;
+  border-radius: 12px !important;
+  width: 100% !important;
+}
+
+/* LOGO as image-only button:
+   Must be the FIRST st.button on the page */
+div[data-testid="stButton"]:first-of-type > button {
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+
+  width: 850px !important;
+  height: 550px !important;
+
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  align-items: center;
+
+  background-color: transparent !important;
+  box-shadow: none !important;
+
+  color: transparent !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+}
+
+div[data-testid="stButton"]:first-of-type > button:hover {
+  background-color: transparent !important;
+  filter: brightness(1.05);
+}
+
+div[data-testid="stButton"]:first-of-type > button:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Footer bug panel */
+.footer-bug-panel {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  background: #020617;
+  color: #ffffff;
+  padding: 8px 14px;
+  font-size: 12px;
+  border-top: 1px solid #334155;
+  z-index: 9999;
+}
+
+.footer-bug-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.footer-bug-item {
+  margin-top: 6px;
+  border-top: 1px dashed #475569;
+  padding-top: 4px;
+  white-space: pre-wrap;
+}
