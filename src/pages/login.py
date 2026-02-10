@@ -42,6 +42,8 @@ def log_bug(title: str, details: str = ""):
     })
 
 # ------------------ LOGO (NOT CLICKABLE) ------------------
+BASE_DIR = Path(__file__).resolve().parent
+LOGO_PATH = BASE_DIR / "resources" / "logo.png"
 if LOGO_PATH.exists():
     st.image(str(LOGO_PATH), width=150)
 else:
