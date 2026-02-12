@@ -2,10 +2,12 @@ import re
 import traceback
 import requests
 import streamlit as st
+from pathlib import Path
 
 # ------------------ API ------------------
 API_BASE = "http://localhost:4000"
 UPDATE_PROFILE_URL = f"{API_BASE}/api/auth/updateProfile"
+LOGOUT_URL = f"{API_BASE}/api/auth/logout"  # Assuming you have a logout route in your backend
 
 # ------------------ PAGE ------------------
 st.set_page_config(page_title="Carmate - Update Profile", page_icon="🛻", layout="centered")
@@ -29,6 +31,21 @@ user_data = {
     "email": "arjun@example.com",
     "phone": "+1 555-555-5555",
 }
+
+# ------------------ LOGOUT BUTTON ------------------
+if st.button("Logout"):
+    # Simulate logout by clearing session or calling the API to logout
+    try:
+        # Send the logout request to the backend API
+        resp = requests.post(LOGOUT_URL)
+        if resp.status_code == 200:
+            st.success("✅ Logged out successfully!")
+            # Redirect to the login page or home page (you may want to manage this based on your frontend)
+            st.experimental_rerun()  # This forces a page reload (simulate a redirect)
+        else:
+            st.error("❌ Logout failed. Please try again.")
+    except requests.exceptions.RequestException as ex:
+        st.error(f"❌ Could not connect to backend API: {ex}")
 
 # ------------------ FORM FOR PROFILE UPDATE ------------------
 with st.form("update_profile_form", clear_on_submit=False):
