@@ -64,3 +64,44 @@ div[data-testid="stButton"]:first-of-type > button:focus {
   padding-top: 4px;
   white-space: pre-wrap;
 }
+/* carmate.css */
+
+/* Submit button styling */
+div[data-testid="stFormSubmitButton"] > button {
+  font-size: 18px !important;
+  padding: 12px 22px !important;
+  border-radius: 12px !important;
+  width: 100% !important;
+}
+
+/* Logo button styling (background-image is injected from Python) */
+.logo-wrap button {
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+
+  width: 320px !important;
+  height: 140px !important;
+
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 auto !important;
+  display: block !important;
+
+  background-color: transparent !important;
+  box-shadow: none !important;
+
+  color: transparent !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+}
+
+.logo-wrap button:hover {
+  background-color: transparent !important;
+  filter: brightness(1.05);
+}
+
+.logo-wrap button:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
