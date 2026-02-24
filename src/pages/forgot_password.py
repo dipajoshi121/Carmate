@@ -2,12 +2,14 @@ import os
 import re
 import time
 import traceback
+from pathlib import Path
 
 import requests
 import streamlit as st
 
 from config import CFG
-from db import create_password_reset_token
+from db import create_password_reset_token, DatabaseError
+from ui_helpers import mechanic_girl_background_css
 
 FORGOT_URL = f"{CFG.API_BASE}/api/auth/forgot-password"
 
@@ -24,7 +26,15 @@ def log_bug(title: str, details: str = ""):
         "details": details,
     })
 
-st.set_page_config(page_title="Carmate - Forgot Password", page_icon="🛻", layout="centered")
+st.set_page_config(page_title="Carmate - Forgot Password", page_icon="", layout="centered")
+
+BASE_DIR = Path(__file__).resolve().parent
+CSS_PATH = BASE_DIR / "resources" / "carmate.css"
+if CSS_PATH.exists():
+    st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
+bg = mechanic_girl_background_css()
+if bg:
+    st.markdown(f"<style>{bg}</style>", unsafe_allow_html=True)
 
 st.title("Forgot Password")
 st.write("Enter your email address and we'll send you instructions to reset your password.")
@@ -40,26 +50,32 @@ if send_btn:
         email = fp_email.strip().lower()
         used_db = False
         if os.environ.get("DATABASE_URL"):
-            token = create_password_reset_token(email)
-            if token is not None:
+            try:
+                token = create_password_reset_token(email)
+                if token is not None:
+                    used_db = True
+                    st.success("If that email exists, reset instructions were sent.")
+                else:
+                    log_bug("Forgot password DB error", "Failed to create reset token")
+            except DatabaseError as e:
                 used_db = True
-                st.success("✅ If that email exists, reset instructions were sent.")
-            else:
-                log_bug("Forgot password DB error", "Failed to create reset token")
+                st.error("Database error: " + str(e))
+                st.info("Check DATABASE_URL and run: python run_migration.py")
+                log_bug("Forgot password DB error", str(e))
         if not used_db:
             try:
                 with st.spinner("Sending reset request..."):
                     response = requests.post(FORGOT_URL, json={"email": email}, timeout=10)
                 if response.status_code in (200, 201, 202):
-                    st.success("✅ If that email exists, reset instructions were sent.")
+                    st.success("If that email exists, reset instructions were sent.")
                 else:
-                    st.error(f"❌ Request failed ({response.status_code})")
+                    st.error(f"Request failed ({response.status_code})")
                     log_bug("Forgot password API error", response.text)
             except requests.exceptions.RequestException as ex:
-                st.error("❌ Could not connect to backend. Set DATABASE_URL to use the database (no backend needed for reset), or start the backend at " + CFG.API_BASE)
+                st.error("Could not connect to backend. Set DATABASE_URL to use the database (no backend needed for reset), or start the backend at " + CFG.API_BASE)
                 log_bug("Forgot password connection error", str(ex))
             except Exception:
-                st.error("❌ Unexpected error.")
+                st.error("Unexpected error.")
                 log_bug("Forgot password exception", traceback.format_exc())
 
 st.divider()

@@ -9,7 +9,7 @@ from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_p
 
 CREATE_REQUEST_URL = f"{CFG.API_BASE}/api/service-requests"
 
-st.set_page_config(page_title="Carmate - New Service Request", page_icon="🔧", layout="centered")
+st.set_page_config(page_title="Carmate - New Service Request", page_icon="", layout="centered")
 
 BASE_DIR = Path(__file__).resolve().parent
 CSS_PATH = BASE_DIR / "resources" / "carmate.css"
@@ -54,7 +54,7 @@ if submitted:
             if resp.status_code in (200, 201):
                 data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
                 req_id = data.get("id") or data.get("_id") or data.get("requestId")
-                st.success("✅ Service request created successfully!")
+                st.success("Service request created successfully!")
                 if req_id:
                     st.session_state["selected_request_id"] = req_id
                     st.info(f"Request ID: **{req_id}**")
@@ -70,7 +70,7 @@ if submitted:
                     msg = resp.json().get("message", "Bad Request")
                 except Exception:
                     msg = resp.text
-                st.error(f"❌ {msg}")
+                st.error(msg)
                 log_bug("Create request (400)", msg)
             else:
                 st.error(f"Server error ({resp.status_code})")

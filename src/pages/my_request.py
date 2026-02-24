@@ -10,7 +10,7 @@ from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_p
 
 MY_REQUESTS_URL = f"{CFG.API_BASE}/api/service-requests/me"
 
-st.set_page_config(page_title="Carmate - My Requests", page_icon="📋", layout="centered")
+st.set_page_config(page_title="Carmate - My Requests", page_icon="", layout="centered")
 
 BASE_DIR = Path(__file__).resolve().parent
 CSS_PATH = BASE_DIR / "resources" / "carmate.css"
@@ -28,7 +28,7 @@ used_db = False
 
 if os.environ.get("DATABASE_URL") and user_id:
     try:
-        from db import get_my_requests
+        from db import get_my_requests, DatabaseError
         with st.spinner("Loading..."):
             raw = get_my_requests(user_id)
         for r in raw:
@@ -42,6 +42,11 @@ if os.environ.get("DATABASE_URL") and user_id:
                 "createdAt": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at) if created_at else "",
             })
         used_db = True
+    except DatabaseError as e:
+        st.error("Database error: " + str(e))
+        st.info("Check DATABASE_URL and run: python run_migration.py")
+        log_bug("My requests DB error", str(e))
+        items = None
     except Exception:
         st.error("Could not load requests from the database.")
         log_bug("My requests DB error", traceback.format_exc())

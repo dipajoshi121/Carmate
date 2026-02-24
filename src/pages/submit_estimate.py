@@ -12,7 +12,7 @@ from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_p
 
 SUBMIT_ESTIMATE_URL = f"{CFG.API_BASE}/api/service-requests/{{}}/estimate"
 
-st.set_page_config(page_title="Carmate - Submit Estimate", page_icon="🧾", layout="centered")
+st.set_page_config(page_title="Carmate - Submit Estimate", page_icon="", layout="centered")
 
 BASE_DIR = Path(__file__).resolve().parent
 CSS_PATH = BASE_DIR / "resources" / "carmate.css"
@@ -73,7 +73,7 @@ if submitted:
                 )
 
             if resp.status_code in (200, 201):
-                st.success("✅ Estimate submitted successfully!")
+                st.success("Estimate submitted successfully!")
                 if "application/json" in resp.headers.get("content-type", ""):
                     st.json(resp.json())
                 else:
@@ -84,27 +84,27 @@ if submitted:
                     msg = resp.json().get("message", "Bad Request")
                 except Exception:
                     msg = resp.text
-                st.error(f"❌ {msg}")
+                st.error(msg)
                 log_bug("Submit estimate (400)", msg)
 
             elif resp.status_code in (401, 403):
-                st.error("❌ Not authorized. Please login again.")
+                st.error("Not authorized. Please login again.")
                 log_bug("Submit estimate (auth)", resp.text)
 
             elif resp.status_code == 404:
-                st.error("❌ Request not found.")
+                st.error("Request not found.")
                 log_bug("Submit estimate (404)", resp.text)
 
             else:
-                st.error(f"❌ Server error ({resp.status_code})")
+                st.error(f"Server error ({resp.status_code})")
                 log_bug(f"Submit estimate server error {resp.status_code}", resp.text)
 
         except requests.exceptions.RequestException as ex:
-            st.error("❌ Could not connect to backend. Start the backend at " + CFG.API_BASE)
+            st.error("Could not connect to backend. Start the backend at " + CFG.API_BASE)
             log_bug("Submit estimate connection", str(ex))
 
         except Exception:
-            st.error("❌ Unexpected error.")
+            st.error("Unexpected error.")
             log_bug("Submit estimate exception", traceback.format_exc())
 
 st.divider()

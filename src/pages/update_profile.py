@@ -11,7 +11,7 @@ from config import CFG
 UPDATE_PROFILE_URL = f"{CFG.API_BASE}/api/auth/updateProfile"
 LOGOUT_URL = f"{CFG.API_BASE}/api/auth/logout"
 
-st.set_page_config(page_title="Carmate - Update Profile", page_icon="🛻", layout="centered")
+st.set_page_config(page_title="Carmate - Update Profile", page_icon="", layout="centered")
 
 BASE_DIR = Path(__file__).resolve().parent
 CSS_PATH = BASE_DIR / "resources" / "carmate.css"

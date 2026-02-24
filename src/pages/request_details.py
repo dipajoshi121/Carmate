@@ -10,7 +10,7 @@ from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_p
 REQUEST_DETAIL_URL = f"{CFG.API_BASE}/api/service-requests/{{}}"
 UPDATE_ESTIMATE_STATUS_URL = f"{CFG.API_BASE}/api/service-requests/{{}}/estimate/status"
 
-st.set_page_config(page_title="Carmate - Request Details", page_icon="📄", layout="centered")
+st.set_page_config(page_title="Carmate - Request Details", page_icon="", layout="centered")
 
 BASE_DIR = Path(__file__).resolve().parent
 CSS_PATH = BASE_DIR / "resources" / "carmate.css"
@@ -110,7 +110,7 @@ if estimate:
         if est_status in ("submitted", "pending", "quoted"):
             colA, colB = st.columns(2)
             with colA:
-                if st.button("✅ Accept Estimate", key=f"accept_est_{rid}"):
+                if st.button("Accept Estimate", key=f"accept_est_{rid}"):
                     try:
                         resp = requests.patch(
                             UPDATE_ESTIMATE_STATUS_URL.format(rid),
@@ -128,7 +128,7 @@ if estimate:
                         st.error("Error contacting server.")
                         log_bug("Accept estimate exception", str(ex))
             with colB:
-                if st.button("❌ Reject Estimate", key=f"reject_est_{rid}"):
+                if st.button("Reject Estimate", key=f"reject_est_{rid}"):
                     try:
                         resp = requests.patch(
                             UPDATE_ESTIMATE_STATUS_URL.format(rid),

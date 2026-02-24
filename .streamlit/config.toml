@@ -1,0 +1,8 @@
+[server]
+port = 8080
+address = "localhost"
+enableCORS = false
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false

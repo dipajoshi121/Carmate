@@ -8,7 +8,7 @@ from config import CFG
 
 UPLOAD_URL = f"{CFG.API_BASE}/api/service-requests/upload-photos"
 
-st.set_page_config(page_title="Upload Vehicle Photos", page_icon="📸", layout="centered")
+st.set_page_config(page_title="Upload Vehicle Photos", page_icon="", layout="centered")
 
 BASE_DIR = Path(__file__).resolve().parent
 CSS_PATH = BASE_DIR / "resources" / "carmate.css"
@@ -71,18 +71,18 @@ if st.button("Upload Photos"):
             )
 
         if response.status_code in (200, 201):
-            st.success("✅ Photos uploaded successfully!")
+            st.success("Photos uploaded successfully!")
             st.json(response.json())
 
         elif response.status_code == 400:
-            st.error("❌ Invalid request.")
+            st.error("Invalid request.")
             st.text(response.text)
 
         elif response.status_code in (401, 403):
-            st.error("❌ Unauthorized. Please login again.")
+            st.error("Unauthorized. Please login again.")
 
         else:
-            st.error(f"❌ Server error: {response.status_code}")
+            st.error(f"Server error: {response.status_code}")
             st.text(response.text)
 
     except Exception:

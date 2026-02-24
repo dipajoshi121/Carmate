@@ -1,5 +1,28 @@
+import base64
 import time
+from pathlib import Path
+
 import streamlit as st
+
+def mechanic_girl_background_css():
+    res_dir = Path(__file__).resolve().parent / "pages" / "resources"
+    for name in ("mechanic_girl.png", "mechanic_girl.jpg", "mechanic_girl.jpeg", "mechanic_girl.webp"):
+        p = res_dir / name
+        if p.exists():
+            raw = p.read_bytes()
+            b64 = base64.b64encode(raw).decode("ascii")
+            suffix = p.suffix.lower()
+            mime = "image/png" if suffix == ".png" else "image/jpeg" if suffix in (".jpg", ".jpeg") else "image/webp"
+            data_uri = f"data:{mime};base64,{b64}"
+            return f"""
+.stApp {{
+  background: linear-gradient(180deg, rgba(255,255,255,0.75) 0%, rgba(255,255,255,0.75) 100%),
+              url({data_uri}) center center no-repeat !important;
+  background-size: cover !important;
+  background-attachment: fixed !important;
+}}
+"""
+    return ""
 
 def require_login():
     if "token" not in st.session_state:
@@ -29,7 +52,7 @@ def render_footer_bug_panel():
     footer = """
     <div class="footer-bug-panel">
       <details {open}>
-        <summary>🐞 Errors / Bugs ({count})</summary>
+        <summary>Errors / Bugs ({count})</summary>
     """.format(open='open' if count else "", count=count)
     if count == 0:
         footer += "<div class='footer-bug-item'>No errors yet.</div>"

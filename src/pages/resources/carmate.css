@@ -1,157 +1,246 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
 :root {
-  --carmate-bg-page: #fef9c3;
+  --carmate-bg-page: #f8fafc;
+  --carmate-bg-warm: #fefce8;
   --carmate-primary: #0d9488;
   --carmate-primary-dark: #0f766e;
-  --carmate-accent: #ea580c;
+  --carmate-primary-light: #ccfbf1;
+  --carmate-accent: #d97706;
+  --carmate-accent-light: #fef3c7;
   --carmate-card: #ffffff;
-  --carmate-border: #fde047;
+  --carmate-card-border: #e2e8f0;
   --carmate-text: #0f172a;
-  --carmate-text-muted: #334155;
+  --carmate-text-muted: #475569;
   --carmate-success: #059669;
+  --carmate-success-bg: #d1fae5;
   --carmate-error: #dc2626;
-  --carmate-shadow: rgba(15, 23, 42, 0.08);
+  --carmate-error-bg: #fee2e2;
+  --carmate-warning-bg: #fef3c7;
+  --carmate-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --carmate-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+  --carmate-shadow-lg: 0 10px 40px rgba(15, 23, 42, 0.1);
+  --carmate-radius: 14px;
+  --carmate-radius-lg: 20px;
+  --carmate-font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  font-family: var(--carmate-font) !important;
 }
 
 .stApp {
-  background: var(--carmate-bg-page) !important;
+  background: linear-gradient(160deg, var(--carmate-bg-page) 0%, var(--carmate-bg-warm) 100%) !important;
+  min-height: 100vh;
 }
 
 [data-testid="block-container"] {
   background: var(--carmate-card) !important;
-  border-radius: 16px !important;
-  padding: 2rem !important;
-  box-shadow: 0 4px 20px var(--carmate-shadow) !important;
-  border: 1px solid var(--carmate-border) !important;
+  border-radius: var(--carmate-radius-lg) !important;
+  padding: 2.25rem !important;
+  box-shadow: var(--carmate-shadow) !important;
+  border: 1px solid var(--carmate-card-border) !important;
   max-width: 900px !important;
   margin: 0 auto !important;
 }
 
 h1, h2, h3, p, span, label, .stMarkdown, [data-testid="stMarkdownContainer"] {
   color: var(--carmate-text) !important;
+  font-family: var(--carmate-font) !important;
 }
+
 h1, h2, h3 {
   font-weight: 700 !important;
+  letter-spacing: -0.02em;
 }
-h1 { border-bottom: 3px solid var(--carmate-primary); padding-bottom: 0.25rem; color: var(--carmate-text) !important; }
-h2 { border-left: 4px solid var(--carmate-accent); padding-left: 0.5rem; color: var(--carmate-text) !important; }
+
+h1 {
+  font-size: 1.85rem !important;
+  border-bottom: none !important;
+  padding-bottom: 0 !important;
+  color: var(--carmate-primary-dark) !important;
+  background: linear-gradient(135deg, var(--carmate-primary) 0%, var(--carmate-primary-dark) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+h2 {
+  font-size: 1.35rem !important;
+  border-left: 4px solid var(--carmate-accent) !important;
+  padding-left: 0.75rem !important;
+  margin-top: 1.25rem !important;
+  color: var(--carmate-text) !important;
+  -webkit-text-fill-color: var(--carmate-text);
+}
+
+h3 {
+  font-size: 1.1rem !important;
+  color: var(--carmate-text-muted) !important;
+}
+
+p, .stMarkdown {
+  color: var(--carmate-text) !important;
+  line-height: 1.6;
+}
 
 div[data-testid="stButton"] > button[kind="primary"],
 div[data-testid="stFormSubmitButton"] > button {
   background: linear-gradient(135deg, var(--carmate-primary) 0%, var(--carmate-primary-dark) 100%) !important;
   color: #ffffff !important;
-  font-size: 18px !important;
-  padding: 12px 22px !important;
-  border-radius: 12px !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  padding: 0.65rem 1.5rem !important;
+  border-radius: var(--carmate-radius) !important;
   width: 100% !important;
   border: none !important;
-  box-shadow: 0 4px 14px var(--carmate-shadow) !important;
-  font-weight: 600 !important;
+  box-shadow: var(--carmate-shadow-sm) !important;
+  transition: transform 0.15s ease, box-shadow 0.2s ease !important;
 }
+
 div[data-testid="stButton"] > button[kind="primary"]:hover,
 div[data-testid="stFormSubmitButton"] > button:hover {
-  background: linear-gradient(135deg, var(--carmate-primary-dark) 0%, #0d9488 100%) !important;
-  box-shadow: 0 6px 20px var(--carmate-shadow) !important;
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, var(--carmate-primary-dark) 0%, #115e59 100%) !important;
+  box-shadow: 0 6px 20px rgba(13, 148, 136, 0.35) !important;
+  transform: translateY(-2px) !important;
   color: #ffffff !important;
 }
 
 div[data-testid="stButton"] > button:not([kind="primary"]) {
-  border: 2px solid var(--carmate-primary-dark) !important;
-  color: var(--carmate-text) !important;
-  background: #ffffff !important;
-  border-radius: 10px !important;
-  font-weight: 600 !important;
-}
-div[data-testid="stButton"] > button:not([kind="primary"]):hover {
-  background: #e0f2fe !important;
+  border: 2px solid var(--carmate-primary) !important;
   color: var(--carmate-primary-dark) !important;
-  border-color: var(--carmate-primary-dark) !important;
+  background: transparent !important;
+  border-radius: var(--carmate-radius) !important;
+  font-weight: 600 !important;
+  transition: all 0.15s ease !important;
 }
 
-[data-testid="stAlert"] div[data-baseweb="notification"] {
-  border-radius: 12px !important;
-  font-weight: 500 !important;
-  border-left-width: 4px !important;
-  color: var(--carmate-text) !important;
-}
-[data-testid="stAlert"] [data-baseweb="notification"]:has(+ div) { border-left-color: var(--carmate-success) !important; }
-.stAlert [data-baseweb="notification"] { box-shadow: 0 2px 10px rgba(220, 38, 38, 0.15) !important; }
-
-hr {
-  border: none !important;
-  height: 2px !important;
-  background: linear-gradient(90deg, transparent, var(--carmate-border), transparent) !important;
-  margin: 1.5rem 0 !important;
+div[data-testid="stButton"] > button:not([kind="primary"]):hover {
+  background: var(--carmate-primary-light) !important;
+  color: var(--carmate-primary-dark) !important;
+  border-color: var(--carmate-primary) !important;
+  transform: translateY(-1px) !important;
 }
 
 [data-testid="stTextInput"] input,
 [data-testid="stNumberInput"] input,
-.stTextInput input, .stNumberInput input, .stTextArea textarea {
-  color: var(--carmate-text) !important;
-  background-color: #ffffff !important;
+.stTextInput input,
+.stNumberInput input,
+.stTextArea textarea,
+[data-testid="stTextArea"] textarea {
+  color: #ffffff !important;
+  background-color: #808080 !important;
+  border-radius: 10px !important;
+  border: 1px solid var(--carmate-card-border) !important;
+  padding: 0.6rem 0.85rem !important;
+  font-size: 0.95rem !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
 }
-.stTextInput input:focus, .stNumberInput input:focus,
-[data-testid="stTextInput"] input:focus, [data-testid="stNumberInput"] input:focus {
+
+.stTextInput input:focus,
+.stNumberInput input:focus,
+.stTextArea textarea:focus,
+[data-testid="stTextInput"] input:focus,
+[data-testid="stNumberInput"] input:focus,
+[data-testid="stTextArea"] textarea:focus {
   border-color: var(--carmate-primary) !important;
-  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.25) !important;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.2) !important;
+  outline: none !important;
 }
-[data-testid="stCaptionContainer"], .stCaption {
+
+.stTextInput input::placeholder,
+.stTextArea textarea::placeholder,
+[data-testid="stTextInput"] input::placeholder,
+[data-testid="stTextArea"] textarea::placeholder {
+  color: rgba(255, 255, 255, 0.6) !important;
+  opacity: 1;
+}
+
+[data-testid="stCaptionContainer"],
+.stCaption {
   color: var(--carmate-text-muted) !important;
+  font-size: 0.85rem !important;
 }
+
+hr {
+  border: none !important;
+  height: 1px !important;
+  background: linear-gradient(90deg, transparent, var(--carmate-card-border), transparent) !important;
+  margin: 1.5rem 0 !important;
+}
+
+[data-testid="stAlert"] div[data-baseweb="notification"],
 [data-testid="stAlert"] [data-baseweb="notification"] {
+  border-radius: var(--carmate-radius) !important;
+  font-weight: 500 !important;
+  border-left-width: 4px !important;
+  color: var(--carmate-text) !important;
+  padding: 0.9rem 1rem !important;
+  box-shadow: var(--carmate-shadow-sm) !important;
+}
+
+[data-testid="stAlert"] [data-baseweb="notification"] {
+  border-left-color: var(--carmate-primary) !important;
+  background: var(--carmate-primary-light) !important;
+}
+
+div[data-testid="stAlert"]:has([data-baseweb="notification"]) [data-baseweb="notification"] {
+  border-left-color: var(--carmate-primary) !important;
+  background: rgba(13, 148, 136, 0.08) !important;
+}
+
+section[data-testid="stVerticalBlockBorderWrapper"],
+div[data-testid="stVerticalBlockBorderWrapper"] {
+  background: linear-gradient(135deg, #fafafa 0%, #f8fafc 100%) !important;
+  border: 1px solid var(--carmate-card-border) !important;
+  border-radius: var(--carmate-radius) !important;
+  border-left: 4px solid var(--carmate-primary) !important;
+  padding: 1.25rem !important;
+  margin: 0.75rem 0 !important;
+  box-shadow: var(--carmate-shadow-sm) !important;
+}
+
+section[data-testid="stVerticalBlockBorderWrapper"] h2,
+section[data-testid="stVerticalBlockBorderWrapper"] .stMarkdown,
+div[data-testid="stVerticalBlockBorderWrapper"] h2,
+div[data-testid="stVerticalBlockBorderWrapper"] .stMarkdown {
   color: var(--carmate-text) !important;
 }
 
-[data-testid="stSidebar"] {
-  background: #fef08a !important;
+div[data-testid="stExpander"] {
+  background: var(--carmate-card) !important;
+  border: 1px solid var(--carmate-card-border) !important;
+  border-radius: var(--carmate-radius) !important;
+  overflow: hidden;
 }
+
+[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #f0fdfa 0%, #ecfdf5 100%) !important;
+  border-right: 1px solid var(--carmate-card-border) !important;
+}
+
 [data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
 [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] p,
 [data-testid="stSidebar"] a {
   color: var(--carmate-text) !important;
 }
+
+[data-testid="stSidebar"] a:hover {
+  color: var(--carmate-primary-dark) !important;
+}
+
 div[data-testid="stImage"] img {
   max-width: 100%;
   height: auto;
+  border-radius: var(--carmate-radius) !important;
 }
 
 div[data-testid="stFormSubmitButton"] > button {
-  font-size: 18px !important;
-  padding: 12px 22px !important;
-  border-radius: 12px !important;
+  font-size: 0.95rem !important;
+  padding: 0.65rem 1.5rem !important;
+  border-radius: var(--carmate-radius) !important;
   width: 100% !important;
-}
-
-div[data-testid="stButton"]:first-of-type > button {
-  background-size: contain !important;
-  background-repeat: no-repeat !important;
-  background-position: center !important;
-
-  width: 850px !important;
-  height: 550px !important;
-
-  border: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  align-items: center;
-
-  background-color: transparent !important;
-  box-shadow: none !important;
-
-  color: transparent !important;
-  font-size: 0 !important;
-  line-height: 0 !important;
-}
-
-div[data-testid="stButton"]:first-of-type > button:hover {
-  background-color: transparent !important;
-  filter: brightness(1.05);
-}
-
-div[data-testid="stButton"]:first-of-type > button:focus {
-  outline: none !important;
-  box-shadow: none !important;
 }
 
 .footer-bug-panel {
@@ -159,12 +248,13 @@ div[data-testid="stButton"]:first-of-type > button:focus {
   left: 0;
   bottom: 0;
   width: 100%;
-  background: #020617;
-  color: #ffffff;
+  background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
+  color: #e2e8f0;
   padding: 8px 14px;
   font-size: 12px;
   border-top: 1px solid #334155;
   z-index: 9999;
+  font-family: var(--carmate-font) !important;
 }
 
 .footer-bug-panel summary {
@@ -179,29 +269,18 @@ div[data-testid="stButton"]:first-of-type > button:focus {
   white-space: pre-wrap;
 }
 
-div[data-testid="stFormSubmitButton"] > button {
-  font-size: 18px !important;
-  padding: 12px 22px !important;
-  border-radius: 12px !important;
-  width: 100% !important;
-}
-
 .logo-wrap button {
   background-size: contain !important;
   background-repeat: no-repeat !important;
   background-position: center !important;
-
   width: 320px !important;
   height: 140px !important;
-
   border: none !important;
   padding: 0 !important;
   margin: 0 auto !important;
   display: block !important;
-
   background-color: transparent !important;
   box-shadow: none !important;
-
   color: transparent !important;
   font-size: 0 !important;
   line-height: 0 !important;
@@ -215,4 +294,144 @@ div[data-testid="stFormSubmitButton"] > button {
 .logo-wrap button:focus {
   outline: none !important;
   box-shadow: none !important;
+}
+
+[data-testid="stMetric"] {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 1rem 1.25rem;
+  border-radius: var(--carmate-radius);
+  border: 1px solid var(--carmate-card-border);
+}
+
+[data-testid="stDateInput"] input,
+[data-testid="stDateInput"] > div {
+  border-radius: 10px !important;
+  border-color: var(--carmate-card-border) !important;
+  color: #ffffff !important;
+  background-color: #808080 !important;
+}
+[data-testid="stDateInput"] input:focus {
+  border-color: var(--carmate-primary) !important;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.2) !important;
+}
+
+[data-testid="stFileUploader"] section {
+  background: var(--carmate-card) !important;
+  border: 2px dashed var(--carmate-card-border) !important;
+  border-radius: var(--carmate-radius) !important;
+  padding: 1rem !important;
+  transition: border-color 0.2s ease, background 0.2s ease !important;
+}
+[data-testid="stFileUploader"] section:hover,
+[data-testid="stFileUploader"] section:focus-within {
+  border-color: var(--carmate-primary) !important;
+  background: var(--carmate-primary-light) !important;
+}
+[data-testid="stFileUploader"] label {
+  color: var(--carmate-text) !important;
+}
+
+[data-testid="stSelectbox"] > div {
+  border-radius: 10px !important;
+  border-color: var(--carmate-card-border) !important;
+}
+
+[data-testid="stSelectbox"] > div:focus-within {
+  border-color: var(--carmate-primary) !important;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.2) !important;
+}
+
+.stSelectbox label,
+.stMultiSelect label {
+  color: var(--carmate-text) !important;
+}
+
+a {
+  color: var(--carmate-primary) !important;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--carmate-primary-dark) !important;
+  text-decoration: underline;
+}
+
+.stProgress > div > div {
+  background: linear-gradient(90deg, var(--carmate-primary) 0%, var(--carmate-primary-dark) 100%) !important;
+  border-radius: 999px !important;
+}
+
+[data-testid="stSpinner"] label,
+[data-testid="stSpinner"] + div label {
+  color: var(--carmate-text-muted) !important;
+  font-weight: 500 !important;
+}
+
+[data-testid="stHorizontalBlock"] > div {
+  gap: 0.5rem;
+}
+
+label[data-testid="stWidgetLabel"],
+.stWidget label {
+  color: var(--carmate-text) !important;
+  font-weight: 500 !important;
+}
+
+.stJson {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+  border: 1px solid var(--carmate-card-border) !important;
+  border-radius: 10px !important;
+  padding: 1rem !important;
+  font-size: 0.85rem !important;
+}
+
+/* Top bar / navigation */
+.stAppHeader,
+[data-testid="stAppViewContainer"] header {
+  background: linear-gradient(90deg, var(--carmate-primary-dark) 0%, var(--carmate-primary) 100%) !important;
+  border-bottom: 1px solid rgba(255,255,255,0.15) !important;
+  box-shadow: var(--carmate-shadow-sm) !important;
+}
+
+.stAppHeader span,
+.stAppHeader a,
+.stAppHeader label,
+[data-testid="stAppViewContainer"] header span,
+[data-testid="stAppViewContainer"] header a {
+  color: #ffffff !important;
+  font-family: var(--carmate-font) !important;
+  font-weight: 500 !important;
+}
+
+.stAppHeader a:hover,
+[data-testid="stAppViewContainer"] header a:hover {
+  color: var(--carmate-primary-light) !important;
+}
+
+.stAppHeader svg,
+[data-testid="stAppViewContainer"] header svg {
+  color: #ffffff !important;
+}
+
+/* Mobile: nav collapses into sidebar; style the hamburger/overflow trigger */
+@media (max-width: 768px) {
+  .stAppHeader,
+  [data-testid="stAppViewContainer"] header {
+    min-height: 3.5rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  [data-testid="stAppViewContainer"] [data-testid="collapsedControl"],
+  button[aria-label="Open sidebar"],
+  [data-testid="stSidebar"] + div button[aria-label*="sidebar"],
+  .stAppHeader button {
+    color: #ffffff !important;
+    padding: 0.5rem !important;
+    border-radius: var(--carmate-radius) !important;
+  }
+
+  [data-testid="stSidebar"] {
+    top: 3.5rem !important;
+  }
 }

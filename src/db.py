@@ -5,16 +5,28 @@ import secrets
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 
+class DatabaseError(Exception):
+    pass
+
 def _hash_password(password: str) -> str:
     salt = os.environ.get("PASSWORD_SALT", "carmate-default-salt")
     return hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
 
 def get_connection():
     import psycopg2
+    from psycopg2 import OperationalError
     url = os.environ.get("DATABASE_URL")
-    if not url:
+    if not url or not url.strip():
         return None
-    return psycopg2.connect(url)
+    url = url.strip()
+    if "sslmode" not in url and "neon.tech" in url:
+        url += "&sslmode=require" if "?" in url else "?sslmode=require"
+    try:
+        return psycopg2.connect(url)
+    except OperationalError as e:
+        raise DatabaseError(f"Connection failed: {e}") from e
+    except Exception as e:
+        raise DatabaseError(f"Database error: {e}") from e
 
 def _conn():
     return get_connection()
@@ -45,9 +57,9 @@ def create_user(email: str, password: str, full_name: str = None, phone: str = N
             row = cur.fetchone()
         conn.commit()
         return dict(row) if row else None
-    except Exception:
+    except Exception as e:
         conn.rollback()
-        return None
+        raise DatabaseError(str(e)) from e
     finally:
         conn.close()
 
@@ -63,6 +75,10 @@ def get_user_by_email(email: str):
             )
             row = cur.fetchone()
         return dict(row) if row else None
+    except DatabaseError:
+        raise
+    except Exception as e:
+        raise DatabaseError(str(e)) from e
     finally:
         conn.close()
 
@@ -164,9 +180,11 @@ def create_password_reset_token(email: str, expires_hours: int = 24) -> str | No
             )
         conn.commit()
         return token
-    except Exception:
+    except DatabaseError:
+        raise
+    except Exception as e:
         conn.rollback()
-        return None
+        raise DatabaseError(str(e)) from e
     finally:
         conn.close()
 
@@ -248,6 +266,10 @@ def get_my_requests(user_id):
             o["estimate"] = _json(o.get("estimate"))
             out.append(o)
         return out
+    except DatabaseError:
+        raise
+    except Exception as e:
+        raise DatabaseError(str(e)) from e
     finally:
         conn.close()
 
