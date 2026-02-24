@@ -1,4 +1,88 @@
-/* Bigger Create Account button */
+:root {
+  --carmate-primary: #0f766e;
+  --carmate-primary-dark: #0d9488;
+  --carmate-accent: #f59e0b;
+  --carmate-bg: #f0fdfa;
+  --carmate-card: #ffffff;
+  --carmate-border: #99f6e4;
+  --carmate-text: #134e4a;
+  --carmate-success: #059669;
+  --carmate-error: #dc2626;
+  --carmate-shadow: rgba(15, 118, 110, 0.15);
+}
+
+.stApp {
+  background: linear-gradient(160deg, #f0fdfa 0%, #ccfbf1 40%, #e0f2fe 100%) !important;
+}
+
+[data-testid="block-container"] {
+  background: var(--carmate-card) !important;
+  border-radius: 16px !important;
+  padding: 2rem !important;
+  box-shadow: 0 4px 20px var(--carmate-shadow) !important;
+  border: 1px solid var(--carmate-border) !important;
+  max-width: 900px !important;
+  margin: 0 auto !important;
+}
+
+h1, h2, h3 {
+  color: var(--carmate-text) !important;
+  font-weight: 700 !important;
+}
+h1 { border-bottom: 3px solid var(--carmate-primary); padding-bottom: 0.25rem; }
+h2 { border-left: 4px solid var(--carmate-accent); padding-left: 0.5rem; }
+
+div[data-testid="stButton"] > button[kind="primary"],
+div[data-testid="stFormSubmitButton"] > button {
+  background: linear-gradient(135deg, var(--carmate-primary) 0%, var(--carmate-primary-dark) 100%) !important;
+  color: #fff !important;
+  font-size: 18px !important;
+  padding: 12px 22px !important;
+  border-radius: 12px !important;
+  width: 100% !important;
+  border: none !important;
+  box-shadow: 0 4px 14px var(--carmate-shadow) !important;
+  font-weight: 600 !important;
+}
+div[data-testid="stButton"] > button[kind="primary"]:hover,
+div[data-testid="stFormSubmitButton"] > button:hover {
+  background: linear-gradient(135deg, var(--carmate-primary-dark) 0%, #14b8a6 100%) !important;
+  box-shadow: 0 6px 20px var(--carmate-shadow) !important;
+  transform: translateY(-1px);
+}
+
+div[data-testid="stButton"] > button:not([kind="primary"]) {
+  border: 2px solid var(--carmate-primary) !important;
+  color: var(--carmate-primary) !important;
+  background: #fff !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+}
+div[data-testid="stButton"] > button:not([kind="primary"]):hover {
+  background: var(--carmate-bg) !important;
+  color: var(--carmate-primary-dark) !important;
+}
+
+[data-testid="stAlert"] div[data-baseweb="notification"] {
+  border-radius: 12px !important;
+  font-weight: 500 !important;
+  border-left-width: 4px !important;
+}
+[data-testid="stAlert"] [data-baseweb="notification"]:has(+ div) { border-left-color: var(--carmate-success) !important; }
+.stAlert [data-baseweb="notification"] { box-shadow: 0 2px 10px rgba(220, 38, 38, 0.15) !important; }
+
+hr {
+  border: none !important;
+  height: 2px !important;
+  background: linear-gradient(90deg, transparent, var(--carmate-border), transparent) !important;
+  margin: 1.5rem 0 !important;
+}
+
+.stTextInput input:focus, .stNumberInput input:focus {
+  border-color: var(--carmate-primary) !important;
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.2) !important;
+}
+
 div[data-testid="stFormSubmitButton"] > button {
   font-size: 18px !important;
   padding: 12px 22px !important;
@@ -6,8 +90,6 @@ div[data-testid="stFormSubmitButton"] > button {
   width: 100% !important;
 }
 
-/* LOGO as image-only button:
-   Must be the FIRST st.button on the page */
 div[data-testid="stButton"]:first-of-type > button {
   background-size: contain !important;
   background-repeat: no-repeat !important;
@@ -39,7 +121,6 @@ div[data-testid="stButton"]:first-of-type > button:focus {
   box-shadow: none !important;
 }
 
-/* Footer bug panel */
 .footer-bug-panel {
   position: fixed;
   left: 0;
@@ -64,9 +145,7 @@ div[data-testid="stButton"]:first-of-type > button:focus {
   padding-top: 4px;
   white-space: pre-wrap;
 }
-/* carmate.css */
 
-/* Submit button styling */
 div[data-testid="stFormSubmitButton"] > button {
   font-size: 18px !important;
   padding: 12px 22px !important;
@@ -74,7 +153,6 @@ div[data-testid="stFormSubmitButton"] > button {
   width: 100% !important;
 }
 
-/* Logo button styling (background-image is injected from Python) */
 .logo-wrap button {
   background-size: contain !important;
   background-repeat: no-repeat !important;

@@ -6,31 +6,26 @@ from pathlib import Path
 import requests
 import streamlit as st
 
-# ------------------ API (BACKEND) ------------------
 API_BASE = "http://localhost:8501"
 LOGIN_URL = f"{API_BASE}/api/auth/login"
 FORGOT_URL = f"{API_BASE}/api/auth/forgot-password"
 
-# ------------------ PAGE ------------------
 st.set_page_config(page_title="Carmate - Login", page_icon="🛻", layout="centered")
 
-# ------------------ PATHS (WORKS from src/ and src/pages/) ------------------
 BASE_DIR = Path(__file__).resolve().parent
 
 if BASE_DIR.name == "pages":
-    PROJECT_ROOT = BASE_DIR.parent.parent   # .../Carmate
+    PROJECT_ROOT = BASE_DIR.parent.parent
 else:
-    PROJECT_ROOT = BASE_DIR.parent          # .../Carmate
+    PROJECT_ROOT = BASE_DIR.parent
 
 RES_DIR = PROJECT_ROOT / "resources"
 LOGO_PATH = RES_DIR / "logo.png"
 CSS_PATH = RES_DIR / "carmate.css"
 
-# ------------------ LOAD CSS (optional) ------------------
 if CSS_PATH.exists():
     st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
-# ------------------ SIMPLE ERROR LOG (footer panel uses this) ------------------
 if "error_log" not in st.session_state:
     st.session_state.error_log = []
 
@@ -41,7 +36,6 @@ def log_bug(title: str, details: str = ""):
         "details": details
     })
 
-# ------------------ LOGO (NOT CLICKABLE) ------------------
 BASE_DIR = Path(__file__).resolve().parent
 LOGO_PATH = BASE_DIR / "resources" / "logo.png"
 if LOGO_PATH.exists():
@@ -50,11 +44,9 @@ else:
     st.warning(f"Logo not found at: {LOGO_PATH}")
     log_bug("Logo missing", str(LOGO_PATH))
 
-# ------------------ VALIDATORS ------------------
 def is_valid_email(email: str) -> bool:
     return bool(re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", (email or "").strip()))
 
-# ------------------ UI ------------------
 st.title("Login")
 st.write("Sign in to access Carmate services.")
 
@@ -110,17 +102,14 @@ if submitted:
             st.error("❌ Unexpected error.")
             log_bug("Frontend exception", traceback.format_exc())
 
-# ------------------ REGISTER + FORGOT PASSWORD ------------------
 st.divider()
 
 col_a, col_b = st.columns(2)
 
-# Button to switch to the Register page
 with col_a:
     if st.button("Create a new account (Register)"):
-        st.switch_page("register")  # Switch to register page (no ".py" extension)
+        st.switch_page("pages/register.py")
 
 with col_b:
-    # Switch to forgot_password.py page (no ".py" extension)
     if st.button("Forgot Password?"):
-        st.switch_page("forgot_password")  # Correctly reference the page name without ".py"
+        st.switch_page("pages/forgot_password.py")

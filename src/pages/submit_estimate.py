@@ -10,27 +10,20 @@ import streamlit as st
 from config import CFG
 from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_panel
 
-# ------------------ API ------------------
 SUBMIT_ESTIMATE_URL = f"{CFG.API_BASE}/api/service-requests/{{}}/estimate"
 
-# ------------------ PAGE ------------------
 st.set_page_config(page_title="Carmate - Submit Estimate", page_icon="🧾", layout="centered")
 
-# ------------------ LOAD CSS (optional) ------------------
 BASE_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = BASE_DIR.parent
-CSS_PATH = PROJECT_ROOT / "resources" / "carmate.css"
+CSS_PATH = BASE_DIR / "resources" / "carmate.css"
 if CSS_PATH.exists():
     st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
-# ------------------ AUTH ------------------
 require_login()
 
-# ------------------ UI ------------------
 st.title("Submit Estimate")
 st.write("Submit an estimated cost so the customer knows the expected service cost.")
 
-# Optional: prefill request_id if navigated from another page
 prefill_rid = st.session_state.get("selected_request_id", "")
 request_id = st.text_input("Service Request ID", value=prefill_rid, placeholder="Paste the request ID here")
 
@@ -51,7 +44,6 @@ with st.form("estimate_form", clear_on_submit=False):
 
     submitted = st.form_submit_button("Submit Estimate")
 
-# Live preview total (outside form so it updates instantly)
 total = round(float(labor) + float(parts) + float(tax) + float(fees), 2)
 st.caption(f"Estimated Total: {currency.strip().upper()} {total}")
 
@@ -65,7 +57,7 @@ if submitted:
             "parts": float(parts),
             "tax": float(tax),
             "fees": float(fees),
-            "total": total,  # include total for convenience; backend can recompute too
+            "total": total,
             "notes": notes.strip(),
             "valid_until": valid_until.isoformat() if valid_until else None,
             "status": "submitted",
@@ -117,6 +109,6 @@ if submitted:
 
 st.divider()
 if st.button("Back to My Requests"):
-    st.switch_page("pages/my_requests.py")
+    st.switch_page("pages/my_request.py")
 
 render_footer_bug_panel()

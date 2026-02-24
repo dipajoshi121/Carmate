@@ -1,5 +1,3 @@
-# pages/my_requests.py
-
 import traceback
 from pathlib import Path
 
@@ -9,14 +7,12 @@ import streamlit as st
 from config import CFG
 from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_panel
 
-# ------------------ API ------------------
 MY_REQUESTS_URL = f"{CFG.API_BASE}/api/service-requests/me"
 
 st.set_page_config(page_title="Carmate - My Requests", page_icon="📋", layout="centered")
 
 BASE_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = BASE_DIR.parent
-CSS_PATH = PROJECT_ROOT / "resources" / "carmate.css"
+CSS_PATH = BASE_DIR / "resources" / "carmate.css"
 if CSS_PATH.exists():
     st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 

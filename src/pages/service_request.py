@@ -1,41 +1,89 @@
-# backend/routes/service_requests.py (FastAPI example)
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
-from datetime import date
-from typing import Optional
+import traceback
+from pathlib import Path
 
-router = APIRouter()
+import requests
+import streamlit as st
 
-class EstimateIn(BaseModel):
-    currency: str = Field(default="USD", max_length=5)
-    labor: float = Field(ge=0)
-    parts: float = Field(ge=0)
-    tax: float = Field(ge=0)
-    fees: float = Field(default=0, ge=0)
-    notes: Optional[str] = Field(default="")
-    valid_until: Optional[date] = None
+from config import CFG
+from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_panel
 
-def calc_total(e: EstimateIn) -> float:
-    return round(e.labor + e.parts + e.tax + e.fees, 2)
+CREATE_REQUEST_URL = f"{CFG.API_BASE}/api/service-requests"
 
-@router.patch("/api/service-requests/{request_id}/estimate")
-def submit_estimate(request_id: str, est: EstimateIn, user=Depends(...)):  # <-- your auth here
-    # 1) check permissions (technician/admin only)
-    # if user.role not in ("admin", "technician"):
-    #     raise HTTPException(status_code=403, detail="Not allowed")
+st.set_page_config(page_title="Carmate - New Service Request", page_icon="🔧", layout="centered")
 
-    # 2) load request from DB
-    req = ...  # fetch request by id
-    if not req:
-        raise HTTPException(status_code=404, detail="Request not found")
+BASE_DIR = Path(__file__).resolve().parent
+CSS_PATH = BASE_DIR / "resources" / "carmate.css"
+if CSS_PATH.exists():
+    st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
-    # 3) save estimate into the request
-    estimate_obj = est.dict()
-    estimate_obj["total"] = calc_total(est)
-    estimate_obj["status"] = "submitted"   # optional: submitted/accepted/rejected
+require_login()
 
-    req["estimate"] = estimate_obj
-    req["status"] = "Quoted"  # optional: update request status
-    ...  # persist req
+st.title("Create Service Request")
+st.write("Submit a new vehicle service request. We'll match you with verified providers.")
 
-    return {"ok": True, "requestId": request_id, "estimate": req["estimate"]}
+with st.form("service_request_form", clear_on_submit=False):
+    st.subheader("Vehicle")
+    year = st.number_input("Year", min_value=1990, max_value=2030, value=2020, step=1)
+    make = st.text_input("Make", placeholder="e.g. Toyota, Honda")
+    model = st.text_input("Model", placeholder="e.g. Camry, Civic")
+    st.subheader("Service")
+    service_type = st.selectbox(
+        "Service type",
+        ["Oil Change", "Brake Service", "Tire Rotation", "Inspection", "Repair", "Other"],
+    )
+    description = st.text_area("Description (optional)", placeholder="Describe the issue or service needed.")
+    submitted = st.form_submit_button("Create Request")
+
+if submitted:
+    if not make or not model:
+        st.error("Make and Model are required.")
+    else:
+        payload = {
+            "vehicle": {"year": year, "make": make.strip(), "model": model.strip()},
+            "serviceType": service_type,
+            "description": (description or "").strip(),
+        }
+        try:
+            with st.spinner("Creating request..."):
+                resp = requests.post(
+                    CREATE_REQUEST_URL,
+                    json=payload,
+                    headers={**auth_headers(), "Content-Type": "application/json"},
+                    timeout=20,
+                )
+            if resp.status_code in (200, 201):
+                data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+                req_id = data.get("id") or data.get("_id") or data.get("requestId")
+                st.success("✅ Service request created successfully!")
+                if req_id:
+                    st.session_state["selected_request_id"] = req_id
+                    st.info(f"Request ID: **{req_id}**")
+                    if st.button("View this request"):
+                        st.switch_page("pages/request_details.py")
+                    if st.button("Go to My Requests"):
+                        st.switch_page("pages/my_request.py")
+            elif resp.status_code in (401, 403):
+                st.error("Session expired. Please log in again.")
+                log_bug("Create request auth", resp.text)
+            elif resp.status_code == 400:
+                try:
+                    msg = resp.json().get("message", "Bad Request")
+                except Exception:
+                    msg = resp.text
+                st.error(f"❌ {msg}")
+                log_bug("Create request (400)", msg)
+            else:
+                st.error(f"Server error ({resp.status_code})")
+                log_bug("Create request server", resp.text)
+        except requests.exceptions.RequestException as ex:
+            st.error("Could not connect to backend API.")
+            log_bug("Create request connection", str(ex))
+        except Exception:
+            st.error("Unexpected error.")
+            log_bug("Create request exception", traceback.format_exc())
+
+st.divider()
+if st.button("Back to My Requests"):
+    st.switch_page("pages/my_request.py")
+
+render_footer_bug_panel()

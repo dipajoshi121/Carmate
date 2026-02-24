@@ -1,19 +1,20 @@
+import traceback
+from pathlib import Path
+
 import requests
 import streamlit as st
-from pathlib import Path
-import traceback
 
-# ---------------- CONFIG ----------------
-API_BASE = "http://localhost:8501"
-UPLOAD_URL = f"{API_BASE}/api/service-requests/upload-photos"
+from config import CFG
 
-st.set_page_config(
-    page_title="Upload Vehicle Photos",
-    page_icon="📸",
-    layout="centered"
-)
+UPLOAD_URL = f"{CFG.API_BASE}/api/service-requests/upload-photos"
 
-# ---------------- AUTH CHECK ----------------
+st.set_page_config(page_title="Upload Vehicle Photos", page_icon="📸", layout="centered")
+
+BASE_DIR = Path(__file__).resolve().parent
+CSS_PATH = BASE_DIR / "resources" / "carmate.css"
+if CSS_PATH.exists():
+    st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
+
 if "token" not in st.session_state:
     st.warning("Please login first.")
     if st.button("Go to Login"):
@@ -24,7 +25,6 @@ headers = {
     "Authorization": f"Bearer {st.session_state['token']}"
 }
 
-# ---------------- UI ----------------
 st.title("Upload Vehicle Photos")
 st.write("Upload images to support your service request with visual information.")
 
@@ -88,3 +88,7 @@ if st.button("Upload Photos"):
     except Exception:
         st.error("Unexpected error occurred.")
         st.text(traceback.format_exc())
+
+st.divider()
+if st.button("Back to My Requests"):
+    st.switch_page("pages/my_request.py")
