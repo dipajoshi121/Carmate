@@ -1,7 +1,6 @@
-from dataclasses import dataclass
+import os
 
-@dataclass
 class Config:
-    API_BASE: str = "http://localhost:4000"
+    API_BASE = os.environ.get("API_BASE", "http://localhost:4000")
 
 CFG = Config()

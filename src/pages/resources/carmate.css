@@ -1,18 +1,19 @@
 :root {
-  --carmate-primary: #0f766e;
-  --carmate-primary-dark: #0d9488;
-  --carmate-accent: #f59e0b;
-  --carmate-bg: #f0fdfa;
+  --carmate-bg-page: #fef9c3;
+  --carmate-primary: #0d9488;
+  --carmate-primary-dark: #0f766e;
+  --carmate-accent: #ea580c;
   --carmate-card: #ffffff;
-  --carmate-border: #99f6e4;
-  --carmate-text: #134e4a;
+  --carmate-border: #fde047;
+  --carmate-text: #0f172a;
+  --carmate-text-muted: #334155;
   --carmate-success: #059669;
   --carmate-error: #dc2626;
-  --carmate-shadow: rgba(15, 118, 110, 0.15);
+  --carmate-shadow: rgba(15, 23, 42, 0.08);
 }
 
 .stApp {
-  background: linear-gradient(160deg, #f0fdfa 0%, #ccfbf1 40%, #e0f2fe 100%) !important;
+  background: var(--carmate-bg-page) !important;
 }
 
 [data-testid="block-container"] {
@@ -25,17 +26,19 @@
   margin: 0 auto !important;
 }
 
-h1, h2, h3 {
+h1, h2, h3, p, span, label, .stMarkdown, [data-testid="stMarkdownContainer"] {
   color: var(--carmate-text) !important;
+}
+h1, h2, h3 {
   font-weight: 700 !important;
 }
-h1 { border-bottom: 3px solid var(--carmate-primary); padding-bottom: 0.25rem; }
-h2 { border-left: 4px solid var(--carmate-accent); padding-left: 0.5rem; }
+h1 { border-bottom: 3px solid var(--carmate-primary); padding-bottom: 0.25rem; color: var(--carmate-text) !important; }
+h2 { border-left: 4px solid var(--carmate-accent); padding-left: 0.5rem; color: var(--carmate-text) !important; }
 
 div[data-testid="stButton"] > button[kind="primary"],
 div[data-testid="stFormSubmitButton"] > button {
   background: linear-gradient(135deg, var(--carmate-primary) 0%, var(--carmate-primary-dark) 100%) !important;
-  color: #fff !important;
+  color: #ffffff !important;
   font-size: 18px !important;
   padding: 12px 22px !important;
   border-radius: 12px !important;
@@ -46,27 +49,30 @@ div[data-testid="stFormSubmitButton"] > button {
 }
 div[data-testid="stButton"] > button[kind="primary"]:hover,
 div[data-testid="stFormSubmitButton"] > button:hover {
-  background: linear-gradient(135deg, var(--carmate-primary-dark) 0%, #14b8a6 100%) !important;
+  background: linear-gradient(135deg, var(--carmate-primary-dark) 0%, #0d9488 100%) !important;
   box-shadow: 0 6px 20px var(--carmate-shadow) !important;
   transform: translateY(-1px);
+  color: #ffffff !important;
 }
 
 div[data-testid="stButton"] > button:not([kind="primary"]) {
-  border: 2px solid var(--carmate-primary) !important;
-  color: var(--carmate-primary) !important;
-  background: #fff !important;
+  border: 2px solid var(--carmate-primary-dark) !important;
+  color: var(--carmate-text) !important;
+  background: #ffffff !important;
   border-radius: 10px !important;
   font-weight: 600 !important;
 }
 div[data-testid="stButton"] > button:not([kind="primary"]):hover {
-  background: var(--carmate-bg) !important;
+  background: #e0f2fe !important;
   color: var(--carmate-primary-dark) !important;
+  border-color: var(--carmate-primary-dark) !important;
 }
 
 [data-testid="stAlert"] div[data-baseweb="notification"] {
   border-radius: 12px !important;
   font-weight: 500 !important;
   border-left-width: 4px !important;
+  color: var(--carmate-text) !important;
 }
 [data-testid="stAlert"] [data-baseweb="notification"]:has(+ div) { border-left-color: var(--carmate-success) !important; }
 .stAlert [data-baseweb="notification"] { box-shadow: 0 2px 10px rgba(220, 38, 38, 0.15) !important; }
@@ -78,9 +84,36 @@ hr {
   margin: 1.5rem 0 !important;
 }
 
-.stTextInput input:focus, .stNumberInput input:focus {
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input,
+.stTextInput input, .stNumberInput input, .stTextArea textarea {
+  color: var(--carmate-text) !important;
+  background-color: #ffffff !important;
+}
+.stTextInput input:focus, .stNumberInput input:focus,
+[data-testid="stTextInput"] input:focus, [data-testid="stNumberInput"] input:focus {
   border-color: var(--carmate-primary) !important;
-  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.2) !important;
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.25) !important;
+}
+[data-testid="stCaptionContainer"], .stCaption {
+  color: var(--carmate-text-muted) !important;
+}
+[data-testid="stAlert"] [data-baseweb="notification"] {
+  color: var(--carmate-text) !important;
+}
+
+[data-testid="stSidebar"] {
+  background: #fef08a !important;
+}
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] a {
+  color: var(--carmate-text) !important;
+}
+div[data-testid="stImage"] img {
+  max-width: 100%;
+  height: auto;
 }
 
 div[data-testid="stFormSubmitButton"] > button {

@@ -48,7 +48,7 @@ try:
         log_bug("Request details server", resp.text)
         st.stop()
 except requests.exceptions.RequestException as ex:
-    st.error("Could not connect to backend API.")
+    st.error("Could not connect to backend. Set DATABASE_URL or start the backend at " + CFG.API_BASE)
     log_bug("Request details connection", str(ex))
     st.stop()
 except Exception:

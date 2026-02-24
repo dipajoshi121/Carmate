@@ -76,7 +76,7 @@ if submitted:
                 st.error(f"Server error ({resp.status_code})")
                 log_bug("Create request server", resp.text)
         except requests.exceptions.RequestException as ex:
-            st.error("Could not connect to backend API.")
+            st.error("Could not connect to backend. Set DATABASE_URL or start the backend at " + CFG.API_BASE)
             log_bug("Create request connection", str(ex))
         except Exception:
             st.error("Unexpected error.")

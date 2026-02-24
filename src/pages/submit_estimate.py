@@ -100,7 +100,7 @@ if submitted:
                 log_bug(f"Submit estimate server error {resp.status_code}", resp.text)
 
         except requests.exceptions.RequestException as ex:
-            st.error("❌ Could not connect to backend API.")
+            st.error("❌ Could not connect to backend. Start the backend at " + CFG.API_BASE)
             log_bug("Submit estimate connection", str(ex))
 
         except Exception:

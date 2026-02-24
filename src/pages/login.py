@@ -1,3 +1,4 @@
+import os
 import re
 import time
 import traceback
@@ -6,9 +7,11 @@ from pathlib import Path
 import requests
 import streamlit as st
 
-API_BASE = "http://localhost:8501"
-LOGIN_URL = f"{API_BASE}/api/auth/login"
-FORGOT_URL = f"{API_BASE}/api/auth/forgot-password"
+from config import CFG
+from db import verify_password
+
+LOGIN_URL = f"{CFG.API_BASE}/api/auth/login"
+FORGOT_URL = f"{CFG.API_BASE}/api/auth/forgot-password"
 
 st.set_page_config(page_title="Carmate - Login", page_icon="🛻", layout="centered")
 
@@ -66,41 +69,57 @@ if submitted:
         st.error(" | ".join(errors))
         log_bug("Login form validation", " | ".join(errors))
     else:
-        payload = {"email": email.strip().lower(), "password": password}
-        try:
-            with st.spinner("Logging in..."):
-                resp = requests.post(LOGIN_URL, json=payload, timeout=10)
-
-            if resp.status_code in (200, 201):
-                data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+        email_clean = email.strip().lower()
+        used_db = False
+        if os.environ.get("DATABASE_URL"):
+            user = verify_password(email_clean, password)
+            if user:
+                used_db = True
                 st.success("✅ Login successful!")
-                if "token" in data:
-                    st.session_state["token"] = data["token"]
-                if "user" in data:
-                    st.session_state["user"] = data["user"]
-
-            elif resp.status_code in (401, 403):
-                st.error("❌ Invalid email or password.")
-                log_bug("Login failed (auth)", resp.text)
-
-            elif resp.status_code == 400:
-                try:
-                    backend_msg = resp.json().get("message", "Bad Request")
-                except Exception:
-                    backend_msg = resp.text
-                st.error(f"❌ {backend_msg}")
-                log_bug("Login failed (400)", backend_msg)
-
+                st.session_state["token"] = str(user.get("id", ""))
+                st.session_state["user"] = {
+                    "id": str(user.get("id")),
+                    "email": user.get("email"),
+                    "fullName": user.get("full_name"),
+                    "phone": user.get("phone"),
+                    "isActive": user.get("is_active"),
+                }
             else:
-                st.error(f"❌ Server error ({resp.status_code})")
-                log_bug(f"Login server error {resp.status_code}", resp.text)
-
-        except requests.exceptions.RequestException as ex:
-            st.error("❌ Could not connect to backend API.")
-            log_bug("Backend connection error", str(ex))
-        except Exception:
-            st.error("❌ Unexpected error.")
-            log_bug("Frontend exception", traceback.format_exc())
+                st.error("❌ Invalid email or password.")
+                log_bug("Login failed (auth)", "Invalid credentials")
+        if not used_db:
+            try:
+                with st.spinner("Logging in..."):
+                    resp = requests.post(LOGIN_URL, json={"email": email_clean, "password": password}, timeout=10)
+                if resp.status_code in (200, 201):
+                    data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+                    st.success("✅ Login successful!")
+                    if "token" in data:
+                        st.session_state["token"] = data["token"]
+                    if "user" in data:
+                        st.session_state["user"] = data["user"]
+                elif resp.status_code == 401:
+                    st.error("❌ Invalid email or password.")
+                    log_bug("Login failed (auth)", resp.text)
+                elif resp.status_code == 403:
+                    st.error("❌ Access denied (403). If using the database, set DATABASE_URL. Otherwise ensure the backend is running at " + CFG.API_BASE)
+                    log_bug("Login 403", resp.text)
+                elif resp.status_code == 400:
+                    try:
+                        backend_msg = resp.json().get("message", "Bad Request")
+                    except Exception:
+                        backend_msg = resp.text
+                    st.error(f"❌ {backend_msg}")
+                    log_bug("Login failed (400)", backend_msg)
+                else:
+                    st.error(f"❌ Server error ({resp.status_code}). Ensure the backend is running at {CFG.API_BASE}.")
+                    log_bug(f"Login server error {resp.status_code}", resp.text)
+            except requests.exceptions.RequestException as ex:
+                st.error("❌ Could not connect to backend. Set DATABASE_URL in your environment to use the database (no backend needed for login), or start the backend at " + CFG.API_BASE)
+                log_bug("Backend connection error", str(ex))
+            except Exception:
+                st.error("❌ Unexpected error.")
+                log_bug("Frontend exception", traceback.format_exc())
 
 st.divider()
 

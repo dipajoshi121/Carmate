@@ -1,3 +1,4 @@
+import os
 import traceback
 from pathlib import Path
 
@@ -21,52 +22,81 @@ require_login()
 st.title("My Service Requests")
 st.write("Your recent service requests are shown below.")
 
-try:
-    with st.spinner("Loading..."):
-        resp = requests.get(MY_REQUESTS_URL, headers=auth_headers(), timeout=20)
+user_id = st.session_state.get("user", {}).get("id") or st.session_state.get("token")
+items = []
+used_db = False
 
-    if resp.status_code == 200:
-        items = resp.json() if "application/json" in resp.headers.get("content-type", "") else []
+if os.environ.get("DATABASE_URL") and user_id:
+    try:
+        from db import get_my_requests
+        with st.spinner("Loading..."):
+            raw = get_my_requests(user_id)
+        for r in raw:
+            created_at = r.get("created_at")
+            items.append({
+                "id": str(r.get("id")),
+                "_id": str(r.get("id")),
+                "vehicle": r.get("vehicle") or {},
+                "serviceType": r.get("service_type") or "Service",
+                "status": r.get("status") or "Pending",
+                "createdAt": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at) if created_at else "",
+            })
+        used_db = True
+    except Exception:
+        st.error("Could not load requests from the database.")
+        log_bug("My requests DB error", traceback.format_exc())
+        items = None
 
-        if not items:
-            st.info("No requests yet.")
-            if st.button("Create a Request"):
-                st.switch_page("pages/service_request.py")
+if not used_db:
+    try:
+        with st.spinner("Loading..."):
+            resp = requests.get(MY_REQUESTS_URL, headers=auth_headers(), timeout=20)
+
+        if resp.status_code == 200:
+            items = resp.json() if "application/json" in resp.headers.get("content-type", "") else []
+        elif resp.status_code in (401, 403):
+            st.error("Session expired. Please login again.")
+            log_bug("My requests auth", resp.text)
+            items = None
         else:
-            for r in items:
-                rid = r.get("id") or r.get("_id") or "unknown"
-                vehicle = r.get("vehicle", {}) or {}
-                title = f"{vehicle.get('year','')} {vehicle.get('make','')} {vehicle.get('model','')}".strip()
-                status = r.get("status", "Pending")
-                service_type = r.get("serviceType", "Service")
-                created = r.get("createdAt", "")
+            st.error(f"Server error ({resp.status_code})")
+            log_bug("My requests server", resp.text)
+            items = None
+    except requests.exceptions.RequestException as ex:
+        st.error("Could not connect to backend. Set DATABASE_URL and run the migration, or start the backend at " + CFG.API_BASE)
+        log_bug("My requests connection", str(ex))
+        items = None
+    except Exception:
+        st.error("Unexpected error.")
+        log_bug("My requests exception", traceback.format_exc())
+        items = None
 
-                with st.container(border=True):
-                    st.markdown(f"**{service_type}** — *{status}*")
-                    st.write(title if title else "Vehicle info not available")
-                    if created:
-                        st.caption(f"Created: {created}")
-
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button("View Details", key=f"view_{rid}"):
-                            st.session_state["selected_request_id"] = rid
-                            st.switch_page("pages/request_details.py")
-                    with col2:
-                        st.caption(f"Request ID: {rid}")
-
-    elif resp.status_code in (401, 403):
-        st.error("Session expired. Please login again.")
-        log_bug("My requests auth", resp.text)
+if items is not None:
+    if not items:
+        st.info("No requests yet.")
+        if st.button("Create a Request"):
+            st.switch_page("pages/service_request.py")
     else:
-        st.error(f"Server error ({resp.status_code})")
-        log_bug("My requests server", resp.text)
+        for r in items:
+            rid = r.get("id") or r.get("_id") or "unknown"
+            vehicle = r.get("vehicle", {}) or {}
+            title = f"{vehicle.get('year','')} {vehicle.get('make','')} {vehicle.get('model','')}".strip()
+            status = r.get("status", "Pending")
+            service_type = r.get("serviceType", "Service")
+            created = r.get("createdAt", "")
 
-except requests.exceptions.RequestException as ex:
-    st.error("Could not connect to backend API.")
-    log_bug("My requests connection", str(ex))
-except Exception:
-    st.error("Unexpected error.")
-    log_bug("My requests exception", traceback.format_exc())
+            with st.container(border=True):
+                st.markdown(f"**{service_type}** — *{status}*")
+                st.write(title if title else "Vehicle info not available")
+                if created:
+                    st.caption(f"Created: {created}")
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("View Details", key=f"view_{rid}"):
+                        st.session_state["selected_request_id"] = rid
+                        st.switch_page("pages/request_details.py")
+                with col2:
+                    st.caption(f"Request ID: {rid}")
 
 render_footer_bug_panel()

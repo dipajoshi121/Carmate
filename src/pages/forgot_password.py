@@ -6,10 +6,10 @@ import traceback
 import requests
 import streamlit as st
 
+from config import CFG
 from db import create_password_reset_token
 
-API_BASE = os.environ.get("API_BASE", "http://localhost:4000")
-FORGOT_URL = f"{API_BASE}/api/auth/forgot-password"
+FORGOT_URL = f"{CFG.API_BASE}/api/auth/forgot-password"
 
 def is_valid_email(email: str) -> bool:
     return bool(re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", (email or "").strip()))
@@ -56,7 +56,7 @@ if send_btn:
                     st.error(f"❌ Request failed ({response.status_code})")
                     log_bug("Forgot password API error", response.text)
             except requests.exceptions.RequestException as ex:
-                st.error("❌ Could not connect to the backend API.")
+                st.error("❌ Could not connect to backend. Set DATABASE_URL to use the database (no backend needed for reset), or start the backend at " + CFG.API_BASE)
                 log_bug("Forgot password connection error", str(ex))
             except Exception:
                 st.error("❌ Unexpected error.")

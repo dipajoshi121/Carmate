@@ -1,12 +1,15 @@
+import os
 import re
 import traceback
-import requests
-import streamlit as st
 from pathlib import Path
 
-API_BASE = "http://localhost:4000"
-UPDATE_PROFILE_URL = f"{API_BASE}/api/auth/updateProfile"
-LOGOUT_URL = f"{API_BASE}/api/auth/logout"
+import requests
+import streamlit as st
+
+from config import CFG
+
+UPDATE_PROFILE_URL = f"{CFG.API_BASE}/api/auth/updateProfile"
+LOGOUT_URL = f"{CFG.API_BASE}/api/auth/logout"
 
 st.set_page_config(page_title="Carmate - Update Profile", page_icon="🛻", layout="centered")
 
@@ -39,7 +42,7 @@ if st.button("Logout"):
         else:
             st.error(" Logout failed. Please try again.")
     except requests.exceptions.RequestException as ex:
-        st.error(f" Could not connect to backend API: {ex}")
+        st.error(" Could not connect to backend. Set DATABASE_URL or start the backend at " + CFG.API_BASE)
 
 with st.form("update_profile_form", clear_on_submit=False):
     full_name = st.text_input("Full Name", placeholder="e.g., Arjun Khatri", value=user_data["fullName"])
@@ -107,7 +110,7 @@ if submit_button:
                 st.error(f" Server error ({resp.status_code})")
 
         except requests.exceptions.RequestException as ex:
-            st.error(f" Could not connect to backend API: {ex}")
+            st.error(" Could not connect to backend. Set DATABASE_URL or start the backend at " + CFG.API_BASE)
 
         except Exception:
             st.error(" Unexpected frontend error.")

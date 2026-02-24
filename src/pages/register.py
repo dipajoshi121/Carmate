@@ -1,3 +1,4 @@
+import os
 import re
 import time
 import traceback
@@ -6,25 +7,21 @@ from pathlib import Path
 import requests
 import streamlit as st
 
-API_BASE = "http://localhost:8501"
-LOGIN_URL = f"{API_BASE}/api/auth/login"
-FORGOT_URL = f"{API_BASE}/api/auth/forgot-password"
+from config import CFG
+from db import create_user, user_exists_by_email
 
-st.set_page_config(page_title="Carmate - Login", page_icon="🛻", layout="centered")
+REGISTER_URL = f"{CFG.API_BASE}/api/auth/register"
+
+st.set_page_config(page_title="Carmate - Register", page_icon="🛻", layout="centered")
 
 BASE_DIR = Path(__file__).resolve().parent
-
-if BASE_DIR.name == "pages":
-    PROJECT_ROOT = BASE_DIR.parent.parent
-else:
-    PROJECT_ROOT = BASE_DIR.parent
-
-RES_DIR = PROJECT_ROOT / "resources"
-LOGO_PATH = RES_DIR / "logo.png"
-CSS_PATH = RES_DIR / "carmate.css"
-
+CSS_PATH = BASE_DIR / "resources" / "carmate.css"
 if CSS_PATH.exists():
     st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
+
+LOGO_PATH = BASE_DIR / "resources" / "logo.png"
+if LOGO_PATH.exists():
+    st.image(str(LOGO_PATH), width=150)
 
 if "error_log" not in st.session_state:
     st.session_state.error_log = []
@@ -33,161 +30,108 @@ def log_bug(title: str, details: str = ""):
     st.session_state.error_log.append({
         "time": time.strftime("%H:%M:%S"),
         "title": title,
-        "details": details
+        "details": details,
     })
-
-BASE_DIR = Path(__file__).resolve().parent
-LOGO_PATH = BASE_DIR / "resources" / "logo.png"
-if LOGO_PATH.exists():
-    st.image(str(LOGO_PATH), width=150)
-else:
-    st.warning(f"Logo not found at: {LOGO_PATH}")
-    log_bug("Logo missing", str(LOGO_PATH))
 
 def is_valid_email(email: str) -> bool:
     return bool(re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", (email or "").strip()))
 
-st.title("Login")
-st.write("Sign in to access Carmate services.")
+st.title("Register")
+st.write("Create an account to access Carmate services.")
 
-with st.form("login_form", clear_on_submit=False):
+with st.form("register_form", clear_on_submit=False):
+    full_name = st.text_input("Full name", placeholder="e.g., Arjun Khatri")
     email = st.text_input("Email", placeholder="e.g., arjun@example.com")
-    password = st.text_input("Password", type="password", placeholder="Enter your password")
-    submitted = st.form_submit_button("Login")
+    password = st.text_input("Password", type="password", placeholder="Choose a password")
+    confirm_password = st.text_input("Confirm password", type="password", placeholder="Confirm your password")
+    submitted = st.form_submit_button("Register")
 
 if submitted:
     errors = []
+    if not full_name or len(full_name.strip()) < 2:
+        errors.append("Full name is required (at least 2 characters).")
     if not is_valid_email(email):
         errors.append("Please enter a valid email address.")
-    if not password:
-        errors.append("Password is required.")
+    if not password or len(password) < 8:
+        errors.append("Password must be at least 8 characters.")
+    if password and not re.search(r"[A-Za-z]", password):
+        errors.append("Password must include at least one letter.")
+    if password and not re.search(r"\d", password):
+        errors.append("Password must include at least one number.")
+    if password != confirm_password:
+        errors.append("Passwords do not match.")
 
     if errors:
         st.error(" | ".join(errors))
-        log_bug("Login form validation", " | ".join(errors))
+        log_bug("Register form validation", " | ".join(errors))
     else:
-        payload = {"email": email.strip().lower(), "password": password}
-        try:
-            with st.spinner("Logging in..."):
-                resp = requests.post(LOGIN_URL, json=payload, timeout=10)
-
-            if resp.status_code in (200, 201):
-                data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-                st.success("✅ Login successful!")
-                if "token" in data:
-                    st.session_state["token"] = data["token"]
-                if "user" in data:
-                    st.session_state["user"] = data["user"]
-
-            elif resp.status_code in (401, 403):
-                st.error("❌ Invalid email or password.")
-                log_bug("Login failed (auth)", resp.text)
-
-            elif resp.status_code == 400:
-                try:
-                    backend_msg = resp.json().get("message", "Bad Request")
-                except Exception:
-                    backend_msg = resp.text
-                st.error(f"❌ {backend_msg}")
-                log_bug("Login failed (400)", backend_msg)
-
+        email_clean = email.strip().lower()
+        full_name_clean = full_name.strip()
+        used_db = False
+        if os.environ.get("DATABASE_URL"):
+            if user_exists_by_email(email_clean):
+                st.error("❌ An account with this email already exists.")
+                log_bug("Register (duplicate)", email_clean)
+                used_db = True
             else:
-                st.error(f"❌ Server error ({resp.status_code})")
-                log_bug(f"Login server error {resp.status_code}", resp.text)
-
-        except requests.exceptions.RequestException as ex:
-            st.error("❌ Could not connect to backend API.")
-            log_bug("Backend connection error", str(ex))
-        except Exception:
-            st.error("❌ Unexpected error.")
-            log_bug("Frontend exception", traceback.format_exc())
+                user = create_user(email_clean, password, full_name_clean, phone=None)
+                if user:
+                    used_db = True
+                    st.success("✅ Account created. You can now log in.")
+                    st.session_state["token"] = str(user.get("id", ""))
+                    st.session_state["user"] = {
+                        "id": str(user.get("id")),
+                        "email": user.get("email"),
+                        "fullName": user.get("full_name"),
+                        "phone": user.get("phone"),
+                        "isActive": user.get("is_active"),
+                    }
+                    if st.button("Go to Login"):
+                        st.switch_page("pages/login.py")
+                else:
+                    st.error("❌ Could not create account. Please try again.")
+                    log_bug("Register DB error", "create_user returned None")
+                    used_db = True
+        if not used_db:
+            try:
+                with st.spinner("Creating account..."):
+                    resp = requests.post(
+                        REGISTER_URL,
+                        json={"fullName": full_name_clean, "email": email_clean, "password": password},
+                        timeout=10,
+                    )
+                if resp.status_code in (200, 201):
+                    data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+                    st.success("✅ Account created. You can now log in.")
+                    if "token" in data:
+                        st.session_state["token"] = data["token"]
+                    if "user" in data:
+                        st.session_state["user"] = data["user"]
+                    if st.button("Go to Login"):
+                        st.switch_page("pages/login.py")
+                elif resp.status_code == 400:
+                    try:
+                        msg = resp.json().get("message", "Bad Request")
+                    except Exception:
+                        msg = resp.text
+                    st.error(f"❌ {msg}")
+                    log_bug("Register (400)", msg)
+                elif resp.status_code == 409:
+                    st.error("❌ An account with this email already exists.")
+                    log_bug("Register (409)", resp.text)
+                elif resp.status_code == 403:
+                    st.error("❌ Access denied (403). Set DATABASE_URL to use the database, or ensure the backend is running at " + CFG.API_BASE)
+                    log_bug("Register 403", resp.text)
+                else:
+                    st.error(f"❌ Server error ({resp.status_code}). Ensure the backend is running at {CFG.API_BASE}.")
+                    log_bug(f"Register server error {resp.status_code}", resp.text)
+            except requests.exceptions.RequestException as ex:
+                st.error("❌ Could not connect to backend. Set DATABASE_URL to use the database (no backend needed for register), or start the backend at " + CFG.API_BASE)
+                log_bug("Register connection error", str(ex))
+            except Exception:
+                st.error("❌ Unexpected error.")
+                log_bug("Register exception", traceback.format_exc())
 
 st.divider()
-
-col_a, col_b = st.columns(2)
-
-with col_a:
-    if st.button("Back to Login"):
-        st.switch_page("pages/login.py")
-
-with col_b:
-    if st.button("Forgot Password?"):
-        st.switch_page("pages/forgot_password.py")
-
-with st.expander("Reset password (inline)"):
-        st.write("Enter your email and we’ll send reset instructions (if your backend supports it).")
-        fp_email = st.text_input("Email for reset", key="fp_email", placeholder="e.g., arjun@example.com")
-        send_btn = st.button("Send reset link", key="fp_send")
-
-        if send_btn:
-            if not is_valid_email(fp_email):
-                st.error("Please enter a valid email.")
-                log_bug("Forgot password validation", fp_email)
-            else:
-                try:
-                    with st.spinner("Sending reset request..."):
-                        r = requests.post(FORGOT_URL, json={"email": fp_email.strip().lower()}, timeout=10)
-
-                    if r.status_code in (200, 201, 202):
-                        st.success("✅ If that email exists, reset instructions were sent.")
-                    else:
-                        st.error(f"❌ Request failed ({r.status_code})")
-                        log_bug("Forgot password API error", r.text)
-
-                except requests.exceptions.RequestException as ex:
-                    st.error("❌ Could not connect to backend API.")
-                    log_bug("Forgot password connection error", str(ex))
-                except Exception:
-                    st.error("❌ Unexpected error.")
-                    log_bug("Forgot password exception", traceback.format_exc())
-
-st.markdown("""
-<style>
-.footer-bug-panel {
-    position: fixed;
-    left: 0;
-    bottom: 0;
-    width: 100%;
-    background: #020617;
-    color: #ffffff;
-    padding: 8px 14px;
-    font-size: 12px;
-    border-top: 1px solid #334155;
-    z-index: 9999;
-}
-.footer-bug-panel summary {
-    cursor: pointer;
-    font-weight: 600;
-}
-.footer-bug-item {
-    margin-top: 6px;
-    border-top: 1px dashed #475569;
-    padding-top: 4px;
-    white-space: pre-wrap;
-}
-</style>
-""", unsafe_allow_html=True)
-
-bugs = st.session_state.error_log[-5:]
-count = len(st.session_state.error_log)
-
-footer = f"""
-<div class="footer-bug-panel">
-  <details {"open" if count else ""}>
-    <summary>🐞 Errors / Bugs ({count})</summary>
-"""
-
-if count == 0:
-    footer += "<div class='footer-bug-item'>No errors yet.</div>"
-else:
-    for b in reversed(bugs):
-        footer += f"""
-        <div class="footer-bug-item">
-          [{b['time']}] <b>{b['title']}</b><br>
-          {b['details']}
-        </div>
-        """
-
-footer += "</details></div>"
-
-st.markdown(footer, unsafe_allow_html=True)
+if st.button("Already have an account? Log in"):
+    st.switch_page("pages/login.py")
