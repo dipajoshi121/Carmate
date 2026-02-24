@@ -39,13 +39,13 @@ if st.button("Logout"):
         # Send the logout request to the backend API
         resp = requests.post(LOGOUT_URL)
         if resp.status_code == 200:
-            st.success("✅ Logged out successfully!")
+            st.success(" Logged out successfully!")
             # Redirect to the login page or home page (you may want to manage this based on your frontend)
             st.experimental_rerun()  # This forces a page reload (simulate a redirect)
         else:
-            st.error("❌ Logout failed. Please try again.")
+            st.error(" Logout failed. Please try again.")
     except requests.exceptions.RequestException as ex:
-        st.error(f"❌ Could not connect to backend API: {ex}")
+        st.error(f" Could not connect to backend API: {ex}")
 
 # ------------------ FORM FOR PROFILE UPDATE ------------------
 with st.form("update_profile_form", clear_on_submit=False):
@@ -105,7 +105,7 @@ if submit_button:
 
             if resp.status_code == 200:
                 data = resp.json()
-                st.success("✅ Profile updated successfully!")
+                st.success(" Profile updated successfully!")
                 st.json({
                     "id": data["user"]["id"],
                     "fullName": data["user"]["fullName"],
@@ -116,14 +116,14 @@ if submit_button:
 
             elif resp.status_code == 400:
                 backend_msg = resp.json().get("message", "Bad Request")
-                st.error(f"❌ Error: {backend_msg}")
+                st.error(f" Error: {backend_msg}")
 
             else:
-                st.error(f"❌ Server error ({resp.status_code})")
+                st.error(f" Server error ({resp.status_code})")
 
         except requests.exceptions.RequestException as ex:
-            st.error(f"❌ Could not connect to backend API: {ex}")
+            st.error(f" Could not connect to backend API: {ex}")
 
         except Exception:
-            st.error("❌ Unexpected frontend error.")
+            st.error(" Unexpected frontend error.")
             st.text(traceback.format_exc())
