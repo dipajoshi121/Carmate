@@ -72,7 +72,6 @@ if submitted:
                 user = verify_password(email_clean, password)
                 if user:
                     used_db = True
-                    st.success("Login successful!")
                     st.session_state["token"] = str(user.get("id", ""))
                     st.session_state["user"] = {
                         "id": str(user.get("id")),
@@ -81,6 +80,7 @@ if submitted:
                         "phone": user.get("phone"),
                         "isActive": user.get("is_active"),
                     }
+                    st.switch_page("pages/my_request.py")
                 else:
                     st.error("Invalid email or password.")
                     log_bug("Login failed (auth)", "Invalid credentials")
@@ -95,11 +95,11 @@ if submitted:
                     resp = requests.post(LOGIN_URL, json={"email": email_clean, "password": password}, timeout=10)
                 if resp.status_code in (200, 201):
                     data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-                    st.success("Login successful!")
                     if "token" in data:
                         st.session_state["token"] = data["token"]
                     if "user" in data:
                         st.session_state["user"] = data["user"]
+                    st.switch_page("pages/my_request.py")
                 elif resp.status_code == 401:
                     st.error("Invalid email or password.")
                     log_bug("Login failed (auth)", resp.text)
