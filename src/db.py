@@ -345,6 +345,21 @@ def update_estimate_status(request_id, status: str):
     finally:
         conn.close()
 
+def get_request_photos(request_id: str):
+    """Return list of {id, request_id, file_path, uploaded_at} for the given request."""
+    conn = _conn()
+    if not conn:
+        return []
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                "SELECT id, request_id, file_path, uploaded_at FROM service_request_photos WHERE request_id = %s ORDER BY uploaded_at ASC",
+                (str(request_id),),
+            )
+            return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
 def add_request_photo(request_id: str, file_path: str):
     conn = _conn()
     if not conn:

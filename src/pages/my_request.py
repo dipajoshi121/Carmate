@@ -13,6 +13,7 @@ MY_REQUESTS_URL = f"{CFG.API_BASE}/api/service-requests/me"
 st.set_page_config(page_title="Carmate - My Requests", page_icon="", layout="centered")
 
 BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parent.parent  # project root for uploads/
 CSS_PATH = BASE_DIR / "resources" / "carmate.css"
 if CSS_PATH.exists():
     st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
@@ -95,6 +96,27 @@ if items is not None:
                 st.write(title if title else "Vehicle info not available")
                 if created:
                     st.caption(f"Created: {created}")
+
+                photos = []
+                if os.environ.get("DATABASE_URL"):
+                    try:
+                        from db import get_request_photos
+                        photos = get_request_photos(rid)
+                    except Exception:
+                        pass
+                if photos:
+                    st.caption(f"📷 {len(photos)} photo(s)")
+                    cols = st.columns(min(len(photos), 4))
+                    for idx, photo in enumerate(photos[:4]):
+                        fp = photo.get("file_path")
+                        if fp:
+                            abs_path = PROJECT_ROOT / fp
+                            if abs_path.exists():
+                                with cols[idx % len(cols)]:
+                                    try:
+                                        st.image(str(abs_path), caption="", use_container_width=True)
+                                    except Exception:
+                                        st.caption("Photo")
 
                 col1, col2 = st.columns(2)
                 with col1:

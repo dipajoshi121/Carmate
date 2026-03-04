@@ -14,6 +14,7 @@ UPDATE_ESTIMATE_STATUS_URL = f"{CFG.API_BASE}/api/service-requests/{{}}/estimate
 st.set_page_config(page_title="Carmate - Request Details", page_icon="", layout="centered")
 
 BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parent.parent
 CSS_PATH = BASE_DIR / "resources" / "carmate.css"
 if CSS_PATH.exists():
     st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
@@ -103,6 +104,42 @@ with st.container(border=True):
     st.write(title if title else "Vehicle info not available")
     if created:
         st.caption(f"Created: {created}")
+
+# Vehicle photos
+photos_list = []
+if os.environ.get("DATABASE_URL"):
+    try:
+        from db import get_request_photos
+        photos_list = get_request_photos(rid)
+    except Exception:
+        pass
+elif r.get("photos"):
+    photos_list = r.get("photos") if isinstance(r.get("photos"), list) else []
+
+if photos_list:
+    st.subheader("Vehicle photos")
+    if os.environ.get("DATABASE_URL") and photos_list and isinstance(photos_list[0], dict) and photos_list[0].get("file_path"):
+        cols = st.columns(min(len(photos_list), 3))
+        for idx, photo in enumerate(photos_list):
+            fp = photo.get("file_path")
+            if fp:
+                abs_path = PROJECT_ROOT / fp
+                if abs_path.exists():
+                    with cols[idx % 3]:
+                        try:
+                            st.image(str(abs_path), use_container_width=True)
+                        except Exception:
+                            st.caption("Photo")
+    elif not os.environ.get("DATABASE_URL") and photos_list:
+        for item in photos_list:
+            url = item.get("url") or item.get("file_path") if isinstance(item, dict) else None
+            if url:
+                try:
+                    st.image(url, use_container_width=True)
+                except Exception:
+                    st.caption("Photo")
+else:
+    st.caption("No vehicle photos uploaded yet.")
 
 estimate = (r.get("estimate") or {})
 if estimate:
