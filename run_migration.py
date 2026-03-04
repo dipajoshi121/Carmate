@@ -1,9 +1,19 @@
 """
-Run once to create/update Neon schema: set DATABASE_URL then run
+Run once to create/update Neon schema: set DATABASE_URL (in .env or env) then run
   python run_migration.py
 """
 import os
 import sys
+from pathlib import Path
+
+# Load .env from project root so DATABASE_URL is available
+_env = Path(__file__).resolve().parent / ".env"
+if _env.exists():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_env)
+    except ImportError:
+        pass
 
 def main():
     url = os.environ.get("DATABASE_URL")
