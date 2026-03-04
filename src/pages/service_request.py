@@ -1,3 +1,4 @@
+import os
 import traceback
 from pathlib import Path
 
@@ -38,49 +39,77 @@ if submitted:
     if not make or not model:
         st.error("Make and Model are required.")
     else:
-        payload = {
-            "vehicle": {"year": year, "make": make.strip(), "model": model.strip()},
-            "serviceType": service_type,
-            "description": (description or "").strip(),
-        }
-        try:
-            with st.spinner("Creating request..."):
-                resp = requests.post(
-                    CREATE_REQUEST_URL,
-                    json=payload,
-                    headers={**auth_headers(), "Content-Type": "application/json"},
-                    timeout=20,
-                )
-            if resp.status_code in (200, 201):
-                data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-                req_id = data.get("id") or data.get("_id") or data.get("requestId")
-                st.success("Service request created successfully!")
-                if req_id:
+        vehicle = {"year": year, "make": make.strip(), "model": model.strip()}
+        description_clean = (description or "").strip()
+        user_id = st.session_state.get("user", {}).get("id") or st.session_state.get("token")
+        used_db = False
+
+        if os.environ.get("DATABASE_URL") and user_id:
+            try:
+                from db import create_service_request
+                with st.spinner("Creating request..."):
+                    created = create_service_request(user_id, vehicle, service_type, description_clean)
+                if created:
+                    used_db = True
+                    req_id = str(created.get("id", ""))
                     st.session_state["selected_request_id"] = req_id
+                    st.success("Service request created successfully!")
                     st.info(f"Request ID: **{req_id}**")
                     if st.button("View this request"):
                         st.switch_page("pages/request_details.py")
                     if st.button("Go to My Requests"):
                         st.switch_page("pages/my_request.py")
-            elif resp.status_code in (401, 403):
-                st.error("Session expired. Please log in again.")
-                log_bug("Create request auth", resp.text)
-            elif resp.status_code == 400:
-                try:
-                    msg = resp.json().get("message", "Bad Request")
-                except Exception:
-                    msg = resp.text
-                st.error(msg)
-                log_bug("Create request (400)", msg)
-            else:
-                st.error(f"Server error ({resp.status_code})")
-                log_bug("Create request server", resp.text)
-        except requests.exceptions.RequestException as ex:
-            st.error("Could not connect to backend. Set DATABASE_URL or start the backend at " + CFG.API_BASE)
-            log_bug("Create request connection", str(ex))
-        except Exception:
-            st.error("Unexpected error.")
-            log_bug("Create request exception", traceback.format_exc())
+                else:
+                    st.error("Could not create request. Please try again.")
+                    log_bug("Create request DB", "create_service_request returned None")
+            except Exception as e:
+                st.error("Database error: " + str(e))
+                log_bug("Create request DB error", traceback.format_exc())
+
+        if not used_db:
+            payload = {
+                "vehicle": vehicle,
+                "serviceType": service_type,
+                "description": description_clean,
+            }
+            try:
+                with st.spinner("Creating request..."):
+                    resp = requests.post(
+                        CREATE_REQUEST_URL,
+                        json=payload,
+                        headers={**auth_headers(), "Content-Type": "application/json"},
+                        timeout=20,
+                    )
+                if resp.status_code in (200, 201):
+                    data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+                    req_id = data.get("id") or data.get("_id") or data.get("requestId")
+                    st.success("Service request created successfully!")
+                    if req_id:
+                        st.session_state["selected_request_id"] = req_id
+                        st.info(f"Request ID: **{req_id}**")
+                        if st.button("View this request"):
+                            st.switch_page("pages/request_details.py")
+                        if st.button("Go to My Requests"):
+                            st.switch_page("pages/my_request.py")
+                elif resp.status_code in (401, 403):
+                    st.error("Session expired. Please log in again.")
+                    log_bug("Create request auth", resp.text)
+                elif resp.status_code == 400:
+                    try:
+                        msg = resp.json().get("message", "Bad Request")
+                    except Exception:
+                        msg = resp.text
+                    st.error(msg)
+                    log_bug("Create request (400)", msg)
+                else:
+                    st.error(f"Server error ({resp.status_code})")
+                    log_bug("Create request server", resp.text)
+            except requests.exceptions.RequestException as ex:
+                st.error("Could not connect to backend. Set DATABASE_URL or start the backend at " + CFG.API_BASE)
+                log_bug("Create request connection", str(ex))
+            except Exception:
+                st.error("Unexpected error.")
+                log_bug("Create request exception", traceback.format_exc())
 
 st.divider()
 if st.button("Back to My Requests"):
