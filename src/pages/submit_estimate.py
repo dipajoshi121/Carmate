@@ -1,5 +1,4 @@
-
-
+import os
 import traceback
 from datetime import date, timedelta
 from pathlib import Path
@@ -51,7 +50,8 @@ if submitted:
     if not request_id or not request_id.strip():
         st.error("Service Request ID is required.")
     else:
-        payload = {
+        req_id_clean = request_id.strip()
+        estimate_payload = {
             "currency": currency.strip().upper(),
             "labor": float(labor),
             "parts": float(parts),
@@ -62,50 +62,68 @@ if submitted:
             "valid_until": valid_until.isoformat() if valid_until else None,
             "status": "submitted",
         }
+        used_db = False
 
-        try:
-            with st.spinner("Submitting estimate..."):
-                resp = requests.patch(
-                    SUBMIT_ESTIMATE_URL.format(request_id.strip()),
-                    json=payload,
-                    headers={**auth_headers(), "Content-Type": "application/json"},
-                    timeout=20,
-                )
-
-            if resp.status_code in (200, 201):
-                st.success("Estimate submitted successfully!")
-                if "application/json" in resp.headers.get("content-type", ""):
-                    st.json(resp.json())
+        if os.environ.get("DATABASE_URL"):
+            try:
+                from db import update_request_estimate
+                with st.spinner("Submitting estimate..."):
+                    result = update_request_estimate(req_id_clean, estimate_payload)
+                if result:
+                    used_db = True
+                    st.success("Estimate submitted successfully!")
+                    st.json(estimate_payload)
                 else:
-                    st.text(resp.text)
+                    st.error("Request not found or could not update estimate.")
+                    log_bug("Submit estimate DB", "update_request_estimate returned None")
+            except Exception as e:
+                st.error("Database error: " + str(e))
+                log_bug("Submit estimate DB error", traceback.format_exc())
 
-            elif resp.status_code == 400:
-                try:
-                    msg = resp.json().get("message", "Bad Request")
-                except Exception:
-                    msg = resp.text
-                st.error(msg)
-                log_bug("Submit estimate (400)", msg)
+        if not used_db:
+            try:
+                with st.spinner("Submitting estimate..."):
+                    resp = requests.patch(
+                        SUBMIT_ESTIMATE_URL.format(req_id_clean),
+                        json=estimate_payload,
+                        headers={**auth_headers(), "Content-Type": "application/json"},
+                        timeout=20,
+                    )
 
-            elif resp.status_code in (401, 403):
-                st.error("Not authorized. Please login again.")
-                log_bug("Submit estimate (auth)", resp.text)
+                if resp.status_code in (200, 201):
+                    st.success("Estimate submitted successfully!")
+                    if "application/json" in resp.headers.get("content-type", ""):
+                        st.json(resp.json())
+                    else:
+                        st.text(resp.text)
 
-            elif resp.status_code == 404:
-                st.error("Request not found.")
-                log_bug("Submit estimate (404)", resp.text)
+                elif resp.status_code == 400:
+                    try:
+                        msg = resp.json().get("message", "Bad Request")
+                    except Exception:
+                        msg = resp.text
+                    st.error(msg)
+                    log_bug("Submit estimate (400)", msg)
 
-            else:
-                st.error(f"Server error ({resp.status_code})")
-                log_bug(f"Submit estimate server error {resp.status_code}", resp.text)
+                elif resp.status_code in (401, 403):
+                    st.error("Not authorized. Please login again.")
+                    log_bug("Submit estimate (auth)", resp.text)
 
-        except requests.exceptions.RequestException as ex:
-            st.error("Could not connect to backend. Start the backend at " + CFG.API_BASE)
-            log_bug("Submit estimate connection", str(ex))
+                elif resp.status_code == 404:
+                    st.error("Request not found.")
+                    log_bug("Submit estimate (404)", resp.text)
 
-        except Exception:
-            st.error("Unexpected error.")
-            log_bug("Submit estimate exception", traceback.format_exc())
+                else:
+                    st.error(f"Server error ({resp.status_code})")
+                    log_bug(f"Submit estimate server error {resp.status_code}", resp.text)
+
+            except requests.exceptions.RequestException as ex:
+                st.error("Could not connect to backend. Set DATABASE_URL or start the backend at " + CFG.API_BASE)
+                log_bug("Submit estimate connection", str(ex))
+
+            except Exception:
+                st.error("Unexpected error.")
+                log_bug("Submit estimate exception", traceback.format_exc())
 
 st.divider()
 if st.button("Back to My Requests"):

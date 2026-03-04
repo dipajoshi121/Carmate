@@ -12,6 +12,9 @@ venv/
 .venv/
 env/
 
+# User uploads (vehicle photos when using DATABASE_URL)
+uploads/
+
 # IDE / OS
 .idea/
 .vscode/

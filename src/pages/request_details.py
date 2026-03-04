@@ -1,3 +1,4 @@
+import os
 import traceback
 from pathlib import Path
 
@@ -29,32 +30,62 @@ if not rid:
 st.title("Request Details")
 st.caption(f"Request ID: {rid}")
 
+user_id = st.session_state.get("user", {}).get("id") or st.session_state.get("token")
 r = None
-try:
-    with st.spinner("Loading request..."):
-        resp = requests.get(REQUEST_DETAIL_URL.format(rid), headers=auth_headers(), timeout=20)
-    if resp.status_code == 200:
-        r = resp.json() if "application/json" in resp.headers.get("content-type", "") else {}
-    elif resp.status_code in (401, 403):
-        st.error("Session expired. Please log in again.")
-        log_bug("Request details auth", resp.text)
+used_db = False
+
+if os.environ.get("DATABASE_URL") and user_id:
+    try:
+        from db import get_request_by_id
+        with st.spinner("Loading request..."):
+            row = get_request_by_id(rid, user_id)
+        if row:
+            used_db = True
+            created_at = row.get("created_at")
+            estimate = row.get("estimate") or {}
+            r = {
+                "id": str(row.get("id", "")),
+                "vehicle": row.get("vehicle") or {},
+                "serviceType": row.get("service_type") or "Service",
+                "status": row.get("status") or "Pending",
+                "createdAt": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at) if created_at else "",
+                "estimate": estimate,
+            }
+        else:
+            st.error("Request not found.")
+            log_bug("Request details 404 (DB)", rid)
+            st.stop()
+    except Exception as e:
+        st.error("Database error: " + str(e))
+        log_bug("Request details DB error", traceback.format_exc())
         st.stop()
-    elif resp.status_code == 404:
-        st.error("Request not found.")
-        log_bug("Request details 404", rid)
+
+if not used_db:
+    try:
+        with st.spinner("Loading request..."):
+            resp = requests.get(REQUEST_DETAIL_URL.format(rid), headers=auth_headers(), timeout=20)
+        if resp.status_code == 200:
+            r = resp.json() if "application/json" in resp.headers.get("content-type", "") else {}
+        elif resp.status_code in (401, 403):
+            st.error("Session expired. Please log in again.")
+            log_bug("Request details auth", resp.text)
+            st.stop()
+        elif resp.status_code == 404:
+            st.error("Request not found.")
+            log_bug("Request details 404", rid)
+            st.stop()
+        else:
+            st.error(f"Server error ({resp.status_code})")
+            log_bug("Request details server", resp.text)
+            st.stop()
+    except requests.exceptions.RequestException as ex:
+        st.error("Could not connect to backend. Set DATABASE_URL or start the backend at " + CFG.API_BASE)
+        log_bug("Request details connection", str(ex))
         st.stop()
-    else:
-        st.error(f"Server error ({resp.status_code})")
-        log_bug("Request details server", resp.text)
+    except Exception:
+        st.error("Unexpected error.")
+        log_bug("Request details exception", traceback.format_exc())
         st.stop()
-except requests.exceptions.RequestException as ex:
-    st.error("Could not connect to backend. Set DATABASE_URL or start the backend at " + CFG.API_BASE)
-    log_bug("Request details connection", str(ex))
-    st.stop()
-except Exception:
-    st.error("Unexpected error.")
-    log_bug("Request details exception", traceback.format_exc())
-    st.stop()
 
 if not r:
     st.info("No request data.")
@@ -111,40 +142,68 @@ if estimate:
             colA, colB = st.columns(2)
             with colA:
                 if st.button("Accept Estimate", key=f"accept_est_{rid}"):
-                    try:
-                        resp = requests.patch(
-                            UPDATE_ESTIMATE_STATUS_URL.format(rid),
-                            json={"status": "accepted"},
-                            headers={**auth_headers(), "Content-Type": "application/json"},
-                            timeout=20,
-                        )
-                        if resp.status_code in (200, 201):
-                            st.success("Estimate accepted.")
-                            st.rerun()
-                        else:
-                            st.error(f"Could not accept estimate ({resp.status_code})")
-                            log_bug("Accept estimate error", resp.text)
-                    except Exception as ex:
-                        st.error("Error contacting server.")
-                        log_bug("Accept estimate exception", str(ex))
+                    done = False
+                    if os.environ.get("DATABASE_URL"):
+                        try:
+                            from db import update_estimate_status
+                            if update_estimate_status(rid, "accepted"):
+                                st.success("Estimate accepted.")
+                                st.rerun()
+                            else:
+                                st.error("Could not accept estimate.")
+                            done = True
+                        except Exception as ex:
+                            st.error("Database error: " + str(ex))
+                            done = True
+                    if not done:
+                        try:
+                            resp = requests.patch(
+                                UPDATE_ESTIMATE_STATUS_URL.format(rid),
+                                json={"status": "accepted"},
+                                headers={**auth_headers(), "Content-Type": "application/json"},
+                                timeout=20,
+                            )
+                            if resp.status_code in (200, 201):
+                                st.success("Estimate accepted.")
+                                st.rerun()
+                            else:
+                                st.error(f"Could not accept estimate ({resp.status_code})")
+                                log_bug("Accept estimate error", resp.text)
+                        except Exception as ex:
+                            st.error("Error contacting server.")
+                            log_bug("Accept estimate exception", str(ex))
             with colB:
                 if st.button("Reject Estimate", key=f"reject_est_{rid}"):
-                    try:
-                        resp = requests.patch(
-                            UPDATE_ESTIMATE_STATUS_URL.format(rid),
-                            json={"status": "rejected"},
-                            headers={**auth_headers(), "Content-Type": "application/json"},
-                            timeout=20,
-                        )
-                        if resp.status_code in (200, 201):
-                            st.success("Estimate rejected.")
-                            st.rerun()
-                        else:
-                            st.error(f"Could not reject estimate ({resp.status_code})")
-                            log_bug("Reject estimate error", resp.text)
-                    except Exception as ex:
-                        st.error("Error contacting server.")
-                        log_bug("Reject estimate exception", str(ex))
+                    done = False
+                    if os.environ.get("DATABASE_URL"):
+                        try:
+                            from db import update_estimate_status
+                            if update_estimate_status(rid, "rejected"):
+                                st.success("Estimate rejected.")
+                                st.rerun()
+                            else:
+                                st.error("Could not reject estimate.")
+                            done = True
+                        except Exception as ex:
+                            st.error("Database error: " + str(ex))
+                            done = True
+                    if not done:
+                        try:
+                            resp = requests.patch(
+                                UPDATE_ESTIMATE_STATUS_URL.format(rid),
+                                json={"status": "rejected"},
+                                headers={**auth_headers(), "Content-Type": "application/json"},
+                                timeout=20,
+                            )
+                            if resp.status_code in (200, 201):
+                                st.success("Estimate rejected.")
+                                st.rerun()
+                            else:
+                                st.error(f"Could not reject estimate ({resp.status_code})")
+                                log_bug("Reject estimate error", resp.text)
+                        except Exception as ex:
+                            st.error("Error contacting server.")
+                            log_bug("Reject estimate exception", str(ex))
         else:
             st.info("This estimate is already finalized.")
 else:
