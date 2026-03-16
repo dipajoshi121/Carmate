@@ -1,5 +1,6 @@
 import os
 import traceback
+from datetime import date, time as time_cls
 from pathlib import Path
 
 import requests
@@ -32,6 +33,12 @@ with st.form("service_request_form", clear_on_submit=False):
         "Service type",
         ["Oil Change", "Brake Service", "Tire Rotation", "Inspection", "Repair", "Other"],
     )
+    preferred_date = st.date_input("Preferred service date", value=date.today())
+    col_time_h, col_time_m = st.columns(2)
+    with col_time_h:
+        hour = st.number_input("Hour (24h)", min_value=0, max_value=23, value=10, step=1)
+    with col_time_m:
+        minute = st.number_input("Minute", min_value=0, max_value=59, value=0, step=15)
     description = st.text_area("Description (optional)", placeholder="Describe the issue or service needed.")
     submitted = st.form_submit_button("Create Request")
 
@@ -41,6 +48,11 @@ if submitted:
     else:
         vehicle = {"year": year, "make": make.strip(), "model": model.strip()}
         description_clean = (description or "").strip()
+        preferred_at = None
+        try:
+            preferred_at = time_cls(int(hour), int(minute))
+        except Exception:
+            preferred_at = None
         user_id = st.session_state.get("user", {}).get("id") or st.session_state.get("token")
         used_db = False
 
@@ -48,7 +60,14 @@ if submitted:
             try:
                 from db import create_service_request
                 with st.spinner("Creating request..."):
-                    created = create_service_request(user_id, vehicle, service_type, description_clean)
+                    created = create_service_request(
+                        user_id,
+                        vehicle,
+                        service_type,
+                        description_clean,
+                        preferred_date=preferred_date,
+                        preferred_time=preferred_at,
+                    )
                 if created:
                     used_db = True
                     req_id = str(created.get("id", ""))
@@ -71,6 +90,8 @@ if submitted:
                 "vehicle": vehicle,
                 "serviceType": service_type,
                 "description": description_clean,
+                "preferredDate": preferred_date.isoformat() if preferred_date else None,
+                "preferredTime": preferred_at.strftime("%H:%M") if preferred_at else None,
             }
             try:
                 with st.spinner("Creating request..."):
