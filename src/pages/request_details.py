@@ -43,6 +43,8 @@ if os.environ.get("DATABASE_URL") and user_id:
         if row:
             used_db = True
             created_at = row.get("created_at")
+            preferred_date = row.get("preferred_date")
+            preferred_time = row.get("preferred_time")
             estimate = row.get("estimate") or {}
             r = {
                 "id": str(row.get("id", "")),
@@ -50,6 +52,8 @@ if os.environ.get("DATABASE_URL") and user_id:
                 "serviceType": row.get("service_type") or "Service",
                 "status": row.get("status") or "Pending",
                 "createdAt": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at) if created_at else "",
+                "preferredDate": preferred_date.isoformat() if hasattr(preferred_date, "isoformat") else str(preferred_date) if preferred_date else "",
+                "preferredTime": preferred_time.strftime("%H:%M") if hasattr(preferred_time, "strftime") else str(preferred_time) if preferred_time else "",
                 "estimate": estimate,
             }
         else:
@@ -97,6 +101,8 @@ title = f"{vehicle.get('year','')} {vehicle.get('make','')} {vehicle.get('model'
 status = r.get("status", "Pending")
 service_type = r.get("serviceType", "Service")
 created = r.get("createdAt", "")
+preferred_date_str = r.get("preferredDate") or ""
+preferred_time_str = r.get("preferredTime") or ""
 
 with st.container(border=True):
     st.subheader("Request summary")
@@ -104,6 +110,13 @@ with st.container(border=True):
     st.write(title if title else "Vehicle info not available")
     if created:
         st.caption(f"Created: {created}")
+    if preferred_date_str or preferred_time_str:
+        when_bits = []
+        if preferred_date_str:
+            when_bits.append(preferred_date_str)
+        if preferred_time_str:
+            when_bits.append(preferred_time_str)
+        st.caption("Customer preferred time: " + " at ".join(when_bits))
 
 # Vehicle photos
 photos_list = []
