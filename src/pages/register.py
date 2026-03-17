@@ -1,11 +1,17 @@
 import os
 import re
+import sys
 import time
 import traceback
 from pathlib import Path
 
 import requests
 import streamlit as st
+
+BASE_DIR = Path(__file__).resolve().parent
+ROOT_DIR = BASE_DIR.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.append(str(ROOT_DIR))
 
 from config import CFG
 from db import create_user, user_exists_by_email, DatabaseError
@@ -15,7 +21,6 @@ REGISTER_URL = f"{CFG.API_BASE}/api/auth/register"
 
 st.set_page_config(page_title="Carmate - Register", page_icon="", layout="centered")
 
-BASE_DIR = Path(__file__).resolve().parent
 CSS_PATH = BASE_DIR / "resources" / "carmate.css"
 if CSS_PATH.exists():
     st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)

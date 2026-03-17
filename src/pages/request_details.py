@@ -28,8 +28,14 @@ if not rid:
         st.switch_page("pages/my_request.py")
     st.stop()
 
+friendly_labels = st.session_state.get("request_labels") or {}
+friendly_name = friendly_labels.get(str(rid))
+
 st.title("Request Details")
-st.caption(f"Request ID: {rid}")
+if friendly_name:
+    st.caption(f"{friendly_name} (ID: {rid})")
+else:
+    st.caption(f"Request ID: {rid}")
 
 user_id = st.session_state.get("user", {}).get("id") or st.session_state.get("token")
 r = None
@@ -134,15 +140,39 @@ if photos_list:
     if os.environ.get("DATABASE_URL") and photos_list and isinstance(photos_list[0], dict) and photos_list[0].get("file_path"):
         cols = st.columns(min(len(photos_list), 3))
         for idx, photo in enumerate(photos_list):
+            pid = photo.get("id")
             fp = photo.get("file_path")
-            if fp:
-                abs_path = PROJECT_ROOT / fp
+            if not fp:
+                continue
+            abs_path = PROJECT_ROOT / fp
+            with cols[idx % len(cols)]:
                 if abs_path.exists():
-                    with cols[idx % 3]:
+                    try:
+                        st.image(str(abs_path), use_container_width=True)
+                    except Exception:
+                        st.caption("Photo")
+                if os.environ.get("DATABASE_URL") and pid:
+                    if st.button("Delete Photo", key=f"del_photo_{pid}"):
+                        deleted = False
+                        err = None
                         try:
-                            st.image(str(abs_path), use_container_width=True)
-                        except Exception:
-                            st.caption("Photo")
+                            from db import delete_request_photo
+                            if delete_request_photo(pid, rid):
+                                deleted = True
+                                try:
+                                    if abs_path.exists():
+                                        abs_path.unlink()
+                                except Exception:
+                                    pass
+                            else:
+                                err = "Could not delete photo in the database."
+                        except Exception as ex:
+                            err = "Database error: " + str(ex)
+                        if deleted:
+                            st.success("Photo deleted.")
+                            st.rerun()
+                        elif err:
+                            st.error(err)
     elif not os.environ.get("DATABASE_URL") and photos_list:
         for item in photos_list:
             url = item.get("url") or item.get("file_path") if isinstance(item, dict) else None

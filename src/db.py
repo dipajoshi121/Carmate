@@ -378,3 +378,44 @@ def add_request_photo(request_id: str, file_path: str):
         return None
     finally:
         conn.close()
+
+def delete_service_request(request_id: str, user_id: str | None = None) -> bool:
+    """Delete a service request owned by the given user. Returns True if deleted."""
+    conn = _conn()
+    if not conn:
+        return False
+    try:
+        with _cur(conn, dict_cursor=False) as cur:
+            if user_id:
+                cur.execute("DELETE FROM service_requests WHERE id = %s AND user_id = %s", (str(request_id), str(user_id)))
+            else:
+                cur.execute("DELETE FROM service_requests WHERE id = %s", (str(request_id),))
+        conn.commit()
+        return cur.rowcount > 0
+    except Exception:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+def delete_request_photo(photo_id: str, request_id: str | None = None) -> bool:
+    """Delete a single photo row. Returns True if deleted."""
+    conn = _conn()
+    if not conn:
+        return False
+    try:
+        with _cur(conn, dict_cursor=False) as cur:
+            if request_id:
+                cur.execute(
+                    "DELETE FROM service_request_photos WHERE id = %s AND request_id = %s",
+                    (str(photo_id), str(request_id)),
+                )
+            else:
+                cur.execute("DELETE FROM service_request_photos WHERE id = %s", (str(photo_id),))
+        conn.commit()
+        return cur.rowcount > 0
+    except Exception:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()

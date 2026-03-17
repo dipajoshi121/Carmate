@@ -1,6 +1,7 @@
 import os
 import traceback
 from pathlib import Path
+import shutil
 
 import requests
 import streamlit as st
@@ -9,6 +10,7 @@ from config import CFG
 from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_panel
 
 MY_REQUESTS_URL = f"{CFG.API_BASE}/api/service-requests/me"
+DELETE_REQUEST_URL = f"{CFG.API_BASE}/api/service-requests/{{}}"
 
 st.set_page_config(page_title="Carmate - My Requests", page_icon="", layout="centered")
 
@@ -83,8 +85,16 @@ if items is not None:
         if st.button("Create a Request"):
             st.switch_page("pages/service_request.py")
     else:
-        for r in items:
+        # Build simple friendly labels like Request 1, Request 2 ...
+        friendly_labels = {}
+        for idx, r in enumerate(items, start=1):
+            rid_val = r.get("id") or r.get("_id") or f"req-{idx}"
+            friendly_labels[str(rid_val)] = f"Request {idx}"
+        st.session_state["request_labels"] = friendly_labels
+
+        for idx, r in enumerate(items, start=1):
             rid = r.get("id") or r.get("_id") or "unknown"
+            friendly_name = friendly_labels.get(str(rid), f"Request {idx}")
             vehicle = r.get("vehicle", {}) or {}
             title = f"{vehicle.get('year','')} {vehicle.get('make','')} {vehicle.get('model','')}".strip()
             status = r.get("status", "Pending")
@@ -105,7 +115,7 @@ if items is not None:
                     except Exception:
                         pass
                 if photos:
-                    st.caption(f"📷 {len(photos)} photo(s)")
+                    st.caption(f"{len(photos)} photo(s)")
                     cols = st.columns(min(len(photos), 4))
                     for idx, photo in enumerate(photos[:4]):
                         fp = photo.get("file_path")
@@ -118,12 +128,53 @@ if items is not None:
                                     except Exception:
                                         st.caption("Photo")
 
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns(3)
                 with col1:
                     if st.button("View Details", key=f"view_{rid}"):
                         st.session_state["selected_request_id"] = rid
                         st.switch_page("pages/request_details.py")
                 with col2:
-                    st.caption(f"Request ID: {rid}")
+                    st.caption(f"{friendly_name}")
+                with col3:
+                    if st.button("Delete Request", key=f"delete_{rid}"):
+                        delete_error = None
+                        deleted = False
+                        if os.environ.get("DATABASE_URL") and user_id:
+                            try:
+                                from db import delete_service_request
+                                if delete_service_request(rid, user_id):
+                                    deleted = True
+                                    uploads_root = PROJECT_ROOT / "uploads" / rid
+                                    try:
+                                        if uploads_root.exists():
+                                            shutil.rmtree(uploads_root)
+                                    except Exception:
+                                        pass
+                                else:
+                                    delete_error = "Could not delete request in the database."
+                            except Exception as ex:
+                                delete_error = "Database error: " + str(ex)
+                        if not deleted:
+                            try:
+                                resp = requests.delete(
+                                    DELETE_REQUEST_URL.format(rid),
+                                    headers=auth_headers(),
+                                    timeout=20,
+                                )
+                                if resp.status_code in (200, 204):
+                                    deleted = True
+                                elif resp.status_code in (401, 403):
+                                    delete_error = "Session expired. Please login again."
+                                else:
+                                    delete_error = f"Could not delete request ({resp.status_code})."
+                            except requests.exceptions.RequestException as ex:
+                                delete_error = "Could not contact backend: " + str(ex)
+                            except Exception as ex:
+                                delete_error = "Unexpected error: " + str(ex)
+                        if deleted:
+                            st.success("Request deleted.")
+                            st.rerun()
+                        elif delete_error:
+                            st.error(delete_error)
 
 render_footer_bug_panel()
