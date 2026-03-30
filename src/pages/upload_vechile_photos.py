@@ -7,7 +7,7 @@ import requests
 import streamlit as st
 
 from config import CFG
-from ui_helpers import auth_headers, require_login, log_bug
+from ui_helpers import auth_headers, require_login, log_bug, get_session_role, ROLE_USER, ROLE_BUSINESS, ROLE_ADMIN
 
 UPLOAD_URL = f"{CFG.API_BASE}/api/service-requests/upload-photos"
 MY_REQUESTS_URL = f"{CFG.API_BASE}/api/service-requests/me"
@@ -21,8 +21,13 @@ if CSS_PATH.exists():
 
 require_login()
 
+role = get_session_role()
+
 st.title("Upload Vehicle Photos")
-st.write("Upload images to support your service request with visual information.")
+if role in (ROLE_BUSINESS, ROLE_ADMIN):
+    st.write("Upload images for any service request (business or admin).")
+else:
+    st.write("Upload images to support your service request with visual information.")
 
 user_id = st.session_state.get("user", {}).get("id") or st.session_state.get("token")
 headers = auth_headers()
@@ -32,9 +37,12 @@ used_db = False
 
 if os.environ.get("DATABASE_URL") and user_id:
     try:
-        from db import get_my_requests, DatabaseError
-        with st.spinner("Loading your requests..."):
-            raw = get_my_requests(user_id)
+        from db import get_my_requests, list_all_service_requests, DatabaseError
+        with st.spinner("Loading requests..."):
+            if role in (ROLE_BUSINESS, ROLE_ADMIN):
+                raw = list_all_service_requests()
+            else:
+                raw = get_my_requests(user_id)
         for idx, r in enumerate(raw, start=1):
             rid = str(r.get("id"))
             vehicle = r.get("vehicle") or {}
@@ -74,9 +82,12 @@ if not used_db:
         st.text(traceback.format_exc())
 
 if not requests_list:
-    st.info("You do not have any requests yet. Please create a service request first.")
-    if st.button("Create a Request"):
-        st.switch_page("pages/service_request.py")
+    if role in (ROLE_BUSINESS, ROLE_ADMIN):
+        st.info("No requests in the database yet.")
+    else:
+        st.info("You do not have any requests yet. Please create a service request first.")
+        if st.button("Create a Request"):
+            st.switch_page("pages/service_request.py")
     st.stop()
 
 labels = [r["label"] for r in requests_list]
@@ -166,5 +177,12 @@ if st.button("Upload Photos"):
             st.text(traceback.format_exc())
 
 st.divider()
-if st.button("Back to My Requests"):
-    st.switch_page("pages/my_request.py")
+if role == ROLE_USER:
+    if st.button("Back to My Requests"):
+        st.switch_page("pages/my_request.py")
+elif role == ROLE_BUSINESS:
+    if st.button("Back to Business dashboard"):
+        st.switch_page("pages/business_dashboard.py")
+else:
+    if st.button("Back to Admin dashboard"):
+        st.switch_page("pages/admin_dashboard.py")

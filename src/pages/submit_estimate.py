@@ -7,7 +7,7 @@ import requests
 import streamlit as st
 
 from config import CFG
-from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_panel
+from ui_helpers import require_role, auth_headers, log_bug, render_footer_bug_panel, ROLE_BUSINESS, ROLE_ADMIN
 
 SUBMIT_ESTIMATE_URL = f"{CFG.API_BASE}/api/service-requests/{{}}/estimate"
 
@@ -18,7 +18,7 @@ CSS_PATH = BASE_DIR / "resources" / "carmate.css"
 if CSS_PATH.exists():
     st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
-require_login()
+require_role(ROLE_BUSINESS, ROLE_ADMIN)
 
 st.title("Submit Estimate")
 st.write("Submit an estimated cost so the customer knows the expected service cost.")

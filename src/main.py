@@ -33,10 +33,14 @@ pages = {
         st.Page("pages/submit_estimate.py", title="Submit Estimate"),
         st.Page("pages/upload_vechile_photos.py", title="Upload Photos"),
     ],
+    "Business": [
+        st.Page("pages/business_dashboard.py", title="Business dashboard"),
+    ],
     "Profile": [
         st.Page("pages/update_profile.py", title="Update Profile"),
     ],
     "Admin": [
+        st.Page("pages/admin_dashboard.py", title="Admin dashboard"),
         st.Page("pages/view_users_registration.py", title="View Users"),
     ],
 }

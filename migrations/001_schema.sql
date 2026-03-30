@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT NOT NULL,
@@ -41,6 +43,9 @@ CREATE INDEX IF NOT EXISTS idx_service_requests_created_at ON service_requests(c
 ALTER TABLE service_requests
   ADD COLUMN IF NOT EXISTS preferred_date DATE,
   ADD COLUMN IF NOT EXISTS preferred_time TIME;
+
+ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS business_creator_id UUID REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_service_requests_business_creator ON service_requests(business_creator_id);
 
 CREATE TABLE IF NOT EXISTS service_request_photos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

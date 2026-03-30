@@ -42,17 +42,20 @@ def _json(val):
         return val
     return json.loads(val) if isinstance(val, str) else val
 
-def create_user(email: str, password: str, full_name: str = None, phone: str = None):
+def create_user(email: str, password: str, full_name: str = None, phone: str = None, role: str = "user"):
     conn = _conn()
     if not conn:
         return None
+    r = (role or "user").strip().lower()
+    if r not in ("user", "business", "admin"):
+        r = "user"
     try:
         with _cur(conn) as cur:
             cur.execute(
-                """INSERT INTO users (email, password_hash, full_name, phone)
-                   VALUES (%s, %s, %s, %s)
-                   RETURNING id, email, full_name, phone, is_active, created_at""",
-                (email.strip().lower(), _hash_password(password), full_name or "", phone or ""),
+                """INSERT INTO users (email, password_hash, full_name, phone, role)
+                   VALUES (%s, %s, %s, %s, %s)
+                   RETURNING id, email, full_name, phone, is_active, role, created_at""",
+                (email.strip().lower(), _hash_password(password), full_name or "", phone or "", r),
             )
             row = cur.fetchone()
         conn.commit()
@@ -70,7 +73,7 @@ def get_user_by_email(email: str):
     try:
         with _cur(conn) as cur:
             cur.execute(
-                "SELECT id, email, password_hash, full_name, phone, is_active, created_at, updated_at FROM users WHERE email = %s LIMIT 1",
+                "SELECT id, email, password_hash, full_name, phone, is_active, role, created_at, updated_at FROM users WHERE email = %s LIMIT 1",
                 (email.strip().lower(),),
             )
             row = cur.fetchone()
@@ -89,7 +92,7 @@ def get_user_by_id(user_id) -> dict | None:
     try:
         with _cur(conn) as cur:
             cur.execute(
-                "SELECT id, email, full_name, phone, is_active, created_at, updated_at FROM users WHERE id = %s LIMIT 1",
+                "SELECT id, email, full_name, phone, is_active, role, created_at, updated_at FROM users WHERE id = %s LIMIT 1",
                 (str(user_id),),
             )
             row = cur.fetchone()
@@ -103,7 +106,10 @@ def verify_password(email: str, password: str) -> dict | None:
         return None
     if _hash_password(password) != u["password_hash"]:
         return None
-    return {k: v for k, v in u.items() if k != "password_hash"}
+    out = {k: v for k, v in u.items() if k != "password_hash"}
+    if not out.get("role"):
+        out["role"] = "user"
+    return out
 
 def update_user(user_id, full_name: str = None, email: str = None, phone: str = None, password: str = None):
     conn = _conn()
@@ -145,7 +151,9 @@ def list_users():
         return []
     try:
         with _cur(conn) as cur:
-            cur.execute("SELECT id, email, full_name, phone, is_active, created_at FROM users ORDER BY created_at DESC")
+            cur.execute(
+                "SELECT id, email, full_name, phone, is_active, role, created_at FROM users ORDER BY created_at DESC"
+            )
             return [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
@@ -221,16 +229,16 @@ def mark_reset_token_used(token: str):
     finally:
         conn.close()
 
-def create_service_request(user_id, vehicle: dict, service_type: str, description: str = "", preferred_date=None, preferred_time=None):
+def create_service_request(user_id, vehicle: dict, service_type: str, description: str = "", preferred_date=None, preferred_time=None, business_creator_id=None):
     conn = _conn()
     if not conn:
         return None
     try:
         with _cur(conn) as cur:
             cur.execute(
-                """INSERT INTO service_requests (user_id, vehicle, service_type, description, status, preferred_date, preferred_time)
-                   VALUES (%s, %s, %s, %s, 'Pending', %s, %s)
-                   RETURNING id, user_id, vehicle, service_type, description, status, estimate, created_at, preferred_date, preferred_time""",
+                """INSERT INTO service_requests (user_id, vehicle, service_type, description, status, preferred_date, preferred_time, business_creator_id)
+                   VALUES (%s, %s, %s, %s, 'Pending', %s, %s, %s)
+                   RETURNING id, user_id, vehicle, service_type, description, status, estimate, created_at, preferred_date, preferred_time, business_creator_id""",
                 (
                     str(user_id),
                     json.dumps(vehicle or {}),
@@ -238,6 +246,7 @@ def create_service_request(user_id, vehicle: dict, service_type: str, descriptio
                     description or "",
                     preferred_date,
                     preferred_time,
+                    str(business_creator_id) if business_creator_id else None,
                 ),
             )
             row = cur.fetchone()
@@ -262,7 +271,7 @@ def get_my_requests(user_id):
         with _cur(conn) as cur:
             cur.execute(
                 """SELECT id, user_id, vehicle, service_type, description, status, estimate,
-                          created_at, updated_at, preferred_date, preferred_time
+                          created_at, updated_at, preferred_date, preferred_time, business_creator_id
                    FROM service_requests WHERE user_id = %s ORDER BY created_at DESC""",
                 (str(user_id),),
             )
@@ -290,14 +299,14 @@ def get_request_by_id(request_id, user_id=None):
             if user_id:
                 cur.execute(
                     """SELECT id, user_id, vehicle, service_type, description, status, estimate,
-                              created_at, updated_at, preferred_date, preferred_time
+                              created_at, updated_at, preferred_date, preferred_time, business_creator_id
                        FROM service_requests WHERE id = %s AND user_id = %s LIMIT 1""",
                     (str(request_id), str(user_id)),
                 )
             else:
                 cur.execute(
                     """SELECT id, user_id, vehicle, service_type, description, status, estimate,
-                              created_at, updated_at, preferred_date, preferred_time
+                              created_at, updated_at, preferred_date, preferred_time, business_creator_id
                        FROM service_requests WHERE id = %s LIMIT 1""",
                     (str(request_id),),
                 )
@@ -345,6 +354,93 @@ def update_estimate_status(request_id, status: str):
                 """UPDATE service_requests SET estimate = jsonb_set(COALESCE(estimate, '{}'::jsonb), '{status}', to_jsonb(%s::text)), updated_at = now()
                    WHERE id = %s RETURNING id, estimate""",
                 (status, str(request_id)),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+def list_all_service_requests():
+    conn = _conn()
+    if not conn:
+        return []
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """SELECT id, user_id, vehicle, service_type, description, status, estimate,
+                          created_at, updated_at, preferred_date, preferred_time, business_creator_id
+                   FROM service_requests ORDER BY created_at DESC"""
+            )
+            rows = cur.fetchall()
+        out = []
+        for r in rows:
+            o = dict(r)
+            o["vehicle"] = _json(o.get("vehicle"))
+            o["estimate"] = _json(o.get("estimate"))
+            out.append(o)
+        return out
+    except Exception as e:
+        raise DatabaseError(str(e)) from e
+    finally:
+        conn.close()
+
+def update_service_request_fields(request_id, status=None, description=None, service_type=None, vehicle=None):
+    conn = _conn()
+    if not conn:
+        return None
+    try:
+        parts = ["updated_at = now()"]
+        args = []
+        if status is not None:
+            parts.append("status = %s")
+            args.append(status)
+        if description is not None:
+            parts.append("description = %s")
+            args.append(description)
+        if service_type is not None:
+            parts.append("service_type = %s")
+            args.append(service_type)
+        if vehicle is not None:
+            parts.append("vehicle = %s")
+            args.append(json.dumps(vehicle))
+        args.append(str(request_id))
+        with _cur(conn) as cur:
+            cur.execute(
+                f"""UPDATE service_requests SET {", ".join(parts)}
+                    WHERE id = %s
+                    RETURNING id, user_id, vehicle, service_type, description, status, estimate, created_at, business_creator_id""",
+                args,
+            )
+            row = cur.fetchone()
+        conn.commit()
+        if not row:
+            return None
+        o = dict(row)
+        o["vehicle"] = _json(o.get("vehicle"))
+        o["estimate"] = _json(o.get("estimate"))
+        return o
+    except Exception:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+def set_user_role(user_id, role: str):
+    r = (role or "user").strip().lower()
+    if r not in ("user", "business", "admin"):
+        return None
+    conn = _conn()
+    if not conn:
+        return None
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                "UPDATE users SET role = %s, updated_at = now() WHERE id = %s RETURNING id, email, role",
+                (r, str(user_id)),
             )
             row = cur.fetchone()
         conn.commit()

@@ -6,7 +6,16 @@ import requests
 import streamlit as st
 
 from config import CFG
-from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_panel
+from ui_helpers import (
+    require_login,
+    auth_headers,
+    log_bug,
+    render_footer_bug_panel,
+    get_session_role,
+    ROLE_USER,
+    ROLE_BUSINESS,
+    ROLE_ADMIN,
+)
 from payments import create_payment_request_api, capture_paypal_order, PaymentError
 
 REQUEST_DETAIL_URL = f"{CFG.API_BASE}/api/service-requests/{{}}"
@@ -22,11 +31,21 @@ if CSS_PATH.exists():
 
 require_login()
 
+role = get_session_role()
+user_id = st.session_state.get("user", {}).get("id") or st.session_state.get("token")
+
 rid = st.session_state.get("selected_request_id")
 if not rid:
-    st.warning("No request selected. Choose one from My Requests.")
-    if st.button("Go to My Requests"):
-        st.switch_page("pages/my_request.py")
+    st.warning("No request selected. Open a request from your dashboard.")
+    if role == ROLE_BUSINESS:
+        if st.button("Business dashboard"):
+            st.switch_page("pages/business_dashboard.py")
+    elif role == ROLE_ADMIN:
+        if st.button("Admin dashboard"):
+            st.switch_page("pages/admin_dashboard.py")
+    else:
+        if st.button("Go to My Requests"):
+            st.switch_page("pages/my_request.py")
     st.stop()
 
 friendly_labels = st.session_state.get("request_labels") or {}
@@ -38,7 +57,6 @@ if friendly_name:
 else:
     st.caption(f"Request ID: {rid}")
 
-user_id = st.session_state.get("user", {}).get("id") or st.session_state.get("token")
 r = None
 used_db = False
 
@@ -46,7 +64,10 @@ if os.environ.get("DATABASE_URL") and user_id:
     try:
         from db import get_request_by_id
         with st.spinner("Loading request..."):
-            row = get_request_by_id(rid, user_id)
+            if role == ROLE_USER:
+                row = get_request_by_id(rid, user_id)
+            else:
+                row = get_request_by_id(rid, None)
         if row:
             used_db = True
             created_at = row.get("created_at")
@@ -62,6 +83,9 @@ if os.environ.get("DATABASE_URL") and user_id:
                 "preferredDate": preferred_date.isoformat() if hasattr(preferred_date, "isoformat") else str(preferred_date) if preferred_date else "",
                 "preferredTime": preferred_time.strftime("%H:%M") if hasattr(preferred_time, "strftime") else str(preferred_time) if preferred_time else "",
                 "estimate": estimate,
+                "description": row.get("description") or "",
+                "ownerUserId": str(row.get("user_id", "")),
+                "businessCreatorId": str(row.get("business_creator_id") or ""),
             }
         else:
             st.error("Request not found.")
@@ -78,6 +102,10 @@ if not used_db:
             resp = requests.get(REQUEST_DETAIL_URL.format(rid), headers=auth_headers(), timeout=20)
         if resp.status_code == 200:
             r = resp.json() if "application/json" in resp.headers.get("content-type", "") else {}
+            if isinstance(r, dict):
+                r.setdefault("ownerUserId", str(r.get("userId") or r.get("user_id") or ""))
+                r.setdefault("businessCreatorId", str(r.get("businessCreatorId") or r.get("business_creator_id") or ""))
+                r.setdefault("description", r.get("description") or "")
         elif resp.status_code in (401, 403):
             st.error("Session expired. Please log in again.")
             log_bug("Request details auth", resp.text)
@@ -103,6 +131,13 @@ if not r:
     st.info("No request data.")
     st.stop()
 
+bcid = (r.get("businessCreatorId") or "").strip()
+owner_uid = (r.get("ownerUserId") or "").strip()
+is_customer_owner = role == ROLE_USER and owner_uid and str(owner_uid) == str(user_id)
+can_submit_estimate = role in (ROLE_BUSINESS, ROLE_ADMIN)
+can_edit_request = role == ROLE_ADMIN or (role == ROLE_BUSINESS and bcid and str(bcid) == str(user_id))
+can_manage_photos = role == ROLE_ADMIN or is_customer_owner or (role == ROLE_BUSINESS and bcid and str(bcid) == str(user_id))
+
 vehicle = r.get("vehicle", {}) or {}
 title = f"{vehicle.get('year','')} {vehicle.get('make','')} {vehicle.get('model','')}".strip()
 status = r.get("status", "Pending")
@@ -124,6 +159,33 @@ with st.container(border=True):
         if preferred_time_str:
             when_bits.append(preferred_time_str)
         st.caption("Customer preferred time: " + " at ".join(when_bits))
+
+if role == ROLE_BUSINESS:
+    st.caption("You are viewing as **business**. Submit estimates from this page or the Submit Estimate page.")
+elif role == ROLE_ADMIN:
+    st.caption("You are viewing as **admin**. You can edit this request and override details.")
+
+if can_edit_request and os.environ.get("DATABASE_URL"):
+    status_choices = ["Pending", "Quoted", "In Progress", "Completed", "Cancelled"]
+    cur_status = status if status in status_choices else status_choices[0]
+    st_idx = status_choices.index(cur_status) if cur_status in status_choices else 0
+    with st.expander("Edit request (description & status)"):
+        with st.form("edit_service_request"):
+            new_desc = st.text_area("Description", value=r.get("description") or "", height=100)
+            new_status = st.selectbox("Status", status_choices, index=st_idx)
+            save_edit = st.form_submit_button("Save changes")
+            if save_edit:
+                try:
+                    from db import update_service_request_fields
+                    out = update_service_request_fields(rid, status=new_status, description=new_desc.strip() or None)
+                    if out:
+                        st.success("Request updated.")
+                        st.rerun()
+                    else:
+                        st.error("Could not update request.")
+                except Exception as ex:
+                    st.error("Database error: " + str(ex))
+                    log_bug("edit request", str(ex))
 
 # Vehicle photos
 photos_list = []
@@ -152,7 +214,7 @@ if photos_list:
                         st.image(str(abs_path), use_container_width=True)
                     except Exception:
                         st.caption("Photo")
-                if os.environ.get("DATABASE_URL") and pid:
+                if os.environ.get("DATABASE_URL") and pid and can_manage_photos:
                     if st.button("Delete Photo", key=f"del_photo_{pid}"):
                         deleted = False
                         err = None
@@ -219,7 +281,7 @@ if estimate:
 
         st.caption(f"Estimate status: {est_status}")
 
-        if est_status in ("submitted", "pending", "quoted"):
+        if est_status in ("submitted", "pending", "quoted") and is_customer_owner:
             colA, colB = st.columns(2)
             with colA:
                 if st.button("Accept Estimate", key=f"accept_est_{rid}"):
@@ -285,7 +347,9 @@ if estimate:
                         except Exception as ex:
                             st.error("Error contacting server.")
                             log_bug("Reject estimate exception", str(ex))
-        elif est_status == "accepted":
+        elif est_status in ("submitted", "pending", "quoted") and not is_customer_owner:
+            st.info("Only the **customer** who owns this request can accept or reject an estimate.")
+        elif est_status == "accepted" and is_customer_owner:
             st.subheader("Payment (PayPal Sandbox)")
             payment_amount = total
             try:
@@ -374,16 +438,26 @@ if estimate:
                         except Exception as ex:
                             st.error("Unexpected payment capture error: " + str(ex))
                             log_bug("Capture payment exception", traceback.format_exc())
+        elif est_status == "accepted" and not is_customer_owner:
+            st.caption("Estimate accepted. Payment is completed by the customer on their account.")
         else:
             st.info("This estimate is already finalized.")
 else:
     st.info("No estimate has been submitted yet.")
 
 st.divider()
-if st.button("Back to My Requests"):
-    st.switch_page("pages/my_request.py")
-if st.button("Submit Estimate for this request"):
-    st.session_state["selected_request_id"] = rid
-    st.switch_page("pages/submit_estimate.py")
+if role == ROLE_USER:
+    if st.button("Back to My Requests"):
+        st.switch_page("pages/my_request.py")
+elif role == ROLE_BUSINESS:
+    if st.button("Back to Business dashboard"):
+        st.switch_page("pages/business_dashboard.py")
+else:
+    if st.button("Back to Admin dashboard"):
+        st.switch_page("pages/admin_dashboard.py")
+if can_submit_estimate:
+    if st.button("Submit Estimate for this request"):
+        st.session_state["selected_request_id"] = rid
+        st.switch_page("pages/submit_estimate.py")
 
 render_footer_bug_panel()

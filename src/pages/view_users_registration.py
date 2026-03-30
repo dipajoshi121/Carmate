@@ -5,7 +5,7 @@ import requests
 import streamlit as st
 
 from config import CFG
-from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_panel
+from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_panel, require_role, ROLE_ADMIN
 
 USERS_URL = f"{CFG.API_BASE}/api/users"
 TOGGLE_USER_URL = f"{CFG.API_BASE}/api/users/{{}}/toggle"
@@ -17,7 +17,7 @@ CSS_PATH = BASE_DIR / "resources" / "carmate.css"
 if CSS_PATH.exists():
     st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
-require_login()
+require_role(ROLE_ADMIN)
 
 def _display_name(user):
     """Normalize display name from API (name/fullName) or DB (full_name)."""
@@ -46,6 +46,7 @@ def fetch_users():
                     "full_name": r.get("full_name"),
                     "phone": r.get("phone"),
                     "is_active": bool(r.get("is_active", True)),
+                    "role": (r.get("role") or "user"),
                     "created_at": r.get("created_at"),
                 }
                 for r in raw
@@ -118,7 +119,7 @@ elif users:
             st.markdown(f"**{name}** — *{email}*")
             if user.get("phone"):
                 st.caption(f"Phone: {user.get('phone')}")
-            st.caption(f"Status: {'Active' if is_active else 'Inactive'}")
+            st.caption(f"Status: {'Active' if is_active else 'Inactive'} | Role: **{user.get('role', 'user')}**")
             if st.button(f"Toggle Status for {name}", key=f"toggle_{uid}"):
                 if toggle_user_status(uid, is_active):
                     st.success(f"User status updated for {name}.")

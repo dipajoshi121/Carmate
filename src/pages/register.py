@@ -15,7 +15,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from config import CFG
 from db import create_user, user_exists_by_email, DatabaseError
-from ui_helpers import mechanic_girl_background_css
+from ui_helpers import mechanic_girl_background_css, ROLE_USER, ROLE_BUSINESS
 
 REGISTER_URL = f"{CFG.API_BASE}/api/auth/register"
 
@@ -45,8 +45,16 @@ def log_bug(title: str, details: str = ""):
 def is_valid_email(email: str) -> bool:
     return bool(re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", (email or "").strip()))
 
-st.title("Register")
-st.write("Create an account to access Carmate services.")
+reg_intent = (st.session_state.get("register_intent") or ROLE_USER).strip().lower()
+if reg_intent not in (ROLE_USER, ROLE_BUSINESS):
+    reg_intent = ROLE_USER
+
+if reg_intent == ROLE_BUSINESS:
+    st.title("Register as business")
+    st.write("Create a business account to view requests and send estimates.")
+else:
+    st.title("Register as customer")
+    st.write("Create an account to request vehicle services.")
 
 with st.form("register_form", clear_on_submit=False):
     full_name = st.text_input("Full name", placeholder="e.g., Arjun Khatri")
@@ -84,7 +92,8 @@ if submitted:
                     log_bug("Register (duplicate)", email_clean)
                     used_db = True
                 else:
-                    user = create_user(email_clean, password, full_name_clean, phone=None)
+                    new_role = ROLE_BUSINESS if reg_intent == ROLE_BUSINESS else ROLE_USER
+                    user = create_user(email_clean, password, full_name_clean, phone=None, role=new_role)
                     if user:
                         used_db = True
                         st.success("Account created. You can now log in.")
@@ -95,7 +104,10 @@ if submitted:
                             "fullName": user.get("full_name"),
                             "phone": user.get("phone"),
                             "isActive": user.get("is_active"),
+                            "role": (user.get("role") or new_role),
                         }
+                        st.session_state["login_intent"] = reg_intent
+                        st.session_state.pop("register_intent", None)
                         if st.button("Go to Login"):
                             st.switch_page("pages/login.py")
                     else:
@@ -108,11 +120,17 @@ if submitted:
                 st.info("Check DATABASE_URL and run: python run_migration.py")
                 log_bug("Register DB error", str(e))
         if not used_db:
+            new_role = ROLE_BUSINESS if reg_intent == ROLE_BUSINESS else ROLE_USER
             try:
                 with st.spinner("Creating account..."):
                     resp = requests.post(
                         REGISTER_URL,
-                        json={"fullName": full_name_clean, "email": email_clean, "password": password},
+                        json={
+                            "fullName": full_name_clean,
+                            "email": email_clean,
+                            "password": password,
+                            "role": new_role,
+                        },
                         timeout=10,
                     )
                 if resp.status_code in (200, 201):
@@ -121,7 +139,12 @@ if submitted:
                     if "token" in data:
                         st.session_state["token"] = data["token"]
                     if "user" in data:
-                        st.session_state["user"] = data["user"]
+                        u = data["user"]
+                        if isinstance(u, dict):
+                            u = {**u, "role": (u.get("role") or new_role)}
+                        st.session_state["user"] = u
+                    st.session_state["login_intent"] = reg_intent
+                    st.session_state.pop("register_intent", None)
                     if st.button("Go to Login"):
                         st.switch_page("pages/login.py")
                 elif resp.status_code == 400:
@@ -149,4 +172,5 @@ if submitted:
 
 st.divider()
 if st.button("Already have an account? Log in"):
+    st.session_state["login_intent"] = reg_intent
     st.switch_page("pages/login.py")

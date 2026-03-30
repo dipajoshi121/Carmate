@@ -1,8 +1,72 @@
 import base64
+import os
 import time
 from pathlib import Path
 
 import streamlit as st
+
+ROLE_USER = "user"
+ROLE_BUSINESS = "business"
+ROLE_ADMIN = "admin"
+
+
+def get_session_role() -> str:
+    u = st.session_state.get("user") or {}
+    r = (u.get("role") or ROLE_USER).strip().lower()
+    if r not in (ROLE_USER, ROLE_BUSINESS, ROLE_ADMIN):
+        return ROLE_USER
+    return r
+
+
+def sync_session_role_from_db():
+    """Align session role with the database so accounts stay tied to their account type."""
+    if not os.environ.get("DATABASE_URL"):
+        return
+    uid = (st.session_state.get("user") or {}).get("id") or st.session_state.get("token")
+    if not uid:
+        return
+    try:
+        from db import get_user_by_id
+
+        row = get_user_by_id(uid)
+        if not row:
+            return
+        r = (row.get("role") or ROLE_USER).strip().lower()
+        if r not in (ROLE_USER, ROLE_BUSINESS, ROLE_ADMIN):
+            r = ROLE_USER
+        u = st.session_state.get("user")
+        if not isinstance(u, dict):
+            u = {}
+        u = {**u, "role": r}
+        st.session_state["user"] = u
+    except Exception:
+        pass
+
+
+def require_role(*allowed: str):
+    if "token" not in st.session_state:
+        st.warning("Please log in first.")
+        if st.button("Go to Login"):
+            st.switch_page("pages/login.py")
+        st.stop()
+    sync_session_role_from_db()
+    role = get_session_role()
+    allowed_l = [a.strip().lower() for a in allowed]
+    if role not in allowed_l:
+        st.error("You do not have access to this page.")
+        if st.button("Go to Home"):
+            st.switch_page("home.py")
+        st.stop()
+
+
+def require_any_role():
+    """Any logged-in user (customer, business, or admin)."""
+    if "token" not in st.session_state:
+        st.warning("Please log in first.")
+        if st.button("Go to Login"):
+            st.switch_page("pages/login.py")
+        st.stop()
+    sync_session_role_from_db()
 
 def mechanic_girl_background_css():
     res_dir = Path(__file__).resolve().parent / "pages" / "resources"
@@ -30,6 +94,7 @@ def require_login():
         if st.button("Go to Login"):
             st.switch_page("pages/login.py")
         st.stop()
+    sync_session_role_from_db()
 
 def auth_headers():
     token = st.session_state.get("token") or ""

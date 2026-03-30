@@ -7,7 +7,7 @@ import requests
 import streamlit as st
 
 from config import CFG
-from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_panel
+from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_panel, get_session_role, ROLE_BUSINESS
 
 CREATE_REQUEST_URL = f"{CFG.API_BASE}/api/service-requests"
 
@@ -20,8 +20,14 @@ if CSS_PATH.exists():
 
 require_login()
 
+role = get_session_role()
 st.title("Create Service Request")
-st.write("Submit a new vehicle service request. We'll match you with verified providers.")
+if role == ROLE_BUSINESS:
+    st.write(
+        "Log a service request for a walk-in or phone booking. It will be tied to your business account so you can edit it later."
+    )
+else:
+    st.write("Submit a new vehicle service request. We'll match you with verified providers.")
 
 with st.form("service_request_form", clear_on_submit=False):
     st.subheader("Vehicle")
@@ -56,6 +62,7 @@ if submitted:
         user_id = st.session_state.get("user", {}).get("id") or st.session_state.get("token")
         db_mode = bool(os.environ.get("DATABASE_URL"))
         used_db = False
+        biz_creator = str(user_id) if role == ROLE_BUSINESS else None
 
         if db_mode and user_id:
             try:
@@ -68,6 +75,7 @@ if submitted:
                         description_clean,
                         preferred_date=preferred_date,
                         preferred_time=preferred_at,
+                        business_creator_id=biz_creator,
                     )
                 if created:
                     used_db = True
@@ -77,8 +85,12 @@ if submitted:
                     st.info(f"Request ID: **{req_id}**")
                     if st.button("View this request"):
                         st.switch_page("pages/request_details.py")
-                    if st.button("Go to My Requests"):
-                        st.switch_page("pages/my_request.py")
+                    if role == ROLE_BUSINESS:
+                        if st.button("Go to Business dashboard"):
+                            st.switch_page("pages/business_dashboard.py")
+                    else:
+                        if st.button("Go to My Requests"):
+                            st.switch_page("pages/my_request.py")
                 else:
                     used_db = True
                     st.error("Could not create request. Please try again.")
@@ -114,8 +126,12 @@ if submitted:
                         st.info(f"Request ID: **{req_id}**")
                         if st.button("View this request"):
                             st.switch_page("pages/request_details.py")
-                        if st.button("Go to My Requests"):
-                            st.switch_page("pages/my_request.py")
+                        if role == ROLE_BUSINESS:
+                            if st.button("Go to Business dashboard"):
+                                st.switch_page("pages/business_dashboard.py")
+                        else:
+                            if st.button("Go to My Requests"):
+                                st.switch_page("pages/my_request.py")
                 elif resp.status_code in (401, 403):
                     st.error("Session expired. Please log in again.")
                     log_bug("Create request auth", resp.text)
@@ -137,7 +153,11 @@ if submitted:
                 log_bug("Create request exception", traceback.format_exc())
 
 st.divider()
-if st.button("Back to My Requests"):
-    st.switch_page("pages/my_request.py")
+if role == ROLE_BUSINESS:
+    if st.button("Back to Business dashboard"):
+        st.switch_page("pages/business_dashboard.py")
+else:
+    if st.button("Back to My Requests"):
+        st.switch_page("pages/my_request.py")
 
 render_footer_bug_panel()
