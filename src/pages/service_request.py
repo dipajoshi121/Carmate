@@ -7,7 +7,15 @@ import requests
 import streamlit as st
 
 from config import CFG
-from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_panel, get_session_role, ROLE_BUSINESS
+from ui_helpers import (
+    require_login,
+    auth_headers,
+    log_bug,
+    render_footer_bug_panel,
+    get_session_role,
+    ROLE_BUSINESS,
+    ROLE_ADMIN,
+)
 
 CREATE_REQUEST_URL = f"{CFG.API_BASE}/api/service-requests"
 
@@ -21,12 +29,16 @@ if CSS_PATH.exists():
 require_login()
 
 role = get_session_role()
-st.title("Create Service Request")
 if role == ROLE_BUSINESS:
+    st.title("Log a shop request")
     st.write(
-        "Log a service request for a walk-in or phone booking. It will be tied to your business account so you can edit it later."
+        "Record a walk-in or phone booking. The job is tied to your business account so you can edit it later."
     )
+elif role == ROLE_ADMIN:
+    st.title("Create service request")
+    st.write("Create a request for testing or on behalf of a customer account.")
 else:
+    st.title("Create Service Request")
     st.write("Submit a new vehicle service request. We'll match you with verified providers.")
 
 with st.form("service_request_form", clear_on_submit=False):
@@ -86,7 +98,7 @@ if submitted:
                     if st.button("View this request"):
                         st.switch_page("pages/request_details.py")
                     if role == ROLE_BUSINESS:
-                        if st.button("Go to Business dashboard"):
+                        if st.button("Go to Business portfolio"):
                             st.switch_page("pages/business_dashboard.py")
                     else:
                         if st.button("Go to My Requests"):
@@ -127,7 +139,7 @@ if submitted:
                         if st.button("View this request"):
                             st.switch_page("pages/request_details.py")
                         if role == ROLE_BUSINESS:
-                            if st.button("Go to Business dashboard"):
+                            if st.button("Go to Business portfolio"):
                                 st.switch_page("pages/business_dashboard.py")
                         else:
                             if st.button("Go to My Requests"):
@@ -154,7 +166,7 @@ if submitted:
 
 st.divider()
 if role == ROLE_BUSINESS:
-    if st.button("Back to Business dashboard"):
+    if st.button("Back to Business portfolio"):
         st.switch_page("pages/business_dashboard.py")
 else:
     if st.button("Back to My Requests"):

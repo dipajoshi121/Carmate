@@ -18,10 +18,10 @@ if bg:
 
 require_role(ROLE_BUSINESS, ROLE_ADMIN)
 
-st.title("Business dashboard")
+st.title("Business portfolio")
 st.write(
-    "Browse all customer service requests. You can open any request to review details and submit an estimate. "
-    "You may edit requests that **your shop created** (walk-ins / on-behalf entries)."
+    "Browse all open service requests. Open a request to review details and submit an estimate. "
+    "You can edit requests that **your shop created** (walk-ins or on-behalf entries)."
 )
 
 uid = st.session_state.get("user", {}).get("id") or st.session_state.get("token")

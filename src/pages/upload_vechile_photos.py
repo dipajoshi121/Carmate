@@ -24,8 +24,10 @@ require_login()
 role = get_session_role()
 
 st.title("Upload Vehicle Photos")
-if role in (ROLE_BUSINESS, ROLE_ADMIN):
-    st.write("Upload images for any service request (business or admin).")
+if role == ROLE_BUSINESS:
+    st.write("Attach photos to any open job in the system.")
+elif role == ROLE_ADMIN:
+    st.write("Attach photos to any service request.")
 else:
     st.write("Upload images to support your service request with visual information.")
 
@@ -55,13 +57,13 @@ if os.environ.get("DATABASE_URL") and user_id:
         log_bug("Upload photos DB error", str(e))
         used_db = False
     except Exception:
-        st.error("Could not load your requests from the database.")
+        st.error("Could not load requests from the database.")
         log_bug("Upload photos DB error", traceback.format_exc())
         used_db = False
 
 if not used_db:
     try:
-        with st.spinner("Loading your requests..."):
+        with st.spinner("Loading requests..."):
             resp = requests.get(MY_REQUESTS_URL, headers=headers, timeout=20)
         if resp.status_code == 200:
             data = resp.json() if "application/json" in resp.headers.get("content-type", "") else []
@@ -74,7 +76,7 @@ if not used_db:
         elif resp.status_code in (401, 403):
             st.error("Session expired. Please login again.")
         else:
-            st.error(f"Could not load your requests ({resp.status_code}).")
+            st.error(f"Could not load requests ({resp.status_code}).")
     except requests.exceptions.RequestException as ex:
         st.error("Could not connect to backend to load requests. Start the backend at " + CFG.API_BASE)
     except Exception:
@@ -181,7 +183,7 @@ if role == ROLE_USER:
     if st.button("Back to My Requests"):
         st.switch_page("pages/my_request.py")
 elif role == ROLE_BUSINESS:
-    if st.button("Back to Business dashboard"):
+    if st.button("Back to Business portfolio"):
         st.switch_page("pages/business_dashboard.py")
 else:
     if st.button("Back to Admin dashboard"):

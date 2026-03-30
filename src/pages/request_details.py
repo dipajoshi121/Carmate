@@ -38,7 +38,7 @@ rid = st.session_state.get("selected_request_id")
 if not rid:
     st.warning("No request selected. Open a request from your dashboard.")
     if role == ROLE_BUSINESS:
-        if st.button("Business dashboard"):
+        if st.button("Business portfolio"):
             st.switch_page("pages/business_dashboard.py")
     elif role == ROLE_ADMIN:
         if st.button("Admin dashboard"):
@@ -158,12 +158,13 @@ with st.container(border=True):
             when_bits.append(preferred_date_str)
         if preferred_time_str:
             when_bits.append(preferred_time_str)
-        st.caption("Customer preferred time: " + " at ".join(when_bits))
+        label = "Your preferred time" if role == ROLE_USER else "Preferred service time"
+        st.caption(label + ": " + " at ".join(when_bits))
 
 if role == ROLE_BUSINESS:
-    st.caption("You are viewing as **business**. Submit estimates from this page or the Submit Estimate page.")
+    st.caption("Submit an estimate from this page or the Submit Estimate page.")
 elif role == ROLE_ADMIN:
-    st.caption("You are viewing as **admin**. You can edit this request and override details.")
+    st.caption("You can edit this request and override details.")
 
 if can_edit_request and os.environ.get("DATABASE_URL"):
     status_choices = ["Pending", "Quoted", "In Progress", "Completed", "Cancelled"]
@@ -439,7 +440,7 @@ if estimate:
                             st.error("Unexpected payment capture error: " + str(ex))
                             log_bug("Capture payment exception", traceback.format_exc())
         elif est_status == "accepted" and not is_customer_owner:
-            st.caption("Estimate accepted. Payment is completed by the customer on their account.")
+            st.caption("Estimate accepted. Payment is completed on the vehicle owner's account.")
         else:
             st.info("This estimate is already finalized.")
 else:
@@ -450,7 +451,7 @@ if role == ROLE_USER:
     if st.button("Back to My Requests"):
         st.switch_page("pages/my_request.py")
 elif role == ROLE_BUSINESS:
-    if st.button("Back to Business dashboard"):
+    if st.button("Back to Business portfolio"):
         st.switch_page("pages/business_dashboard.py")
 else:
     if st.button("Back to Admin dashboard"):

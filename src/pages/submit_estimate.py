@@ -7,7 +7,15 @@ import requests
 import streamlit as st
 
 from config import CFG
-from ui_helpers import require_role, auth_headers, log_bug, render_footer_bug_panel, ROLE_BUSINESS, ROLE_ADMIN
+from ui_helpers import (
+    require_role,
+    auth_headers,
+    log_bug,
+    render_footer_bug_panel,
+    ROLE_BUSINESS,
+    ROLE_ADMIN,
+    get_session_role,
+)
 
 SUBMIT_ESTIMATE_URL = f"{CFG.API_BASE}/api/service-requests/{{}}/estimate"
 
@@ -126,7 +134,12 @@ if submitted:
                 log_bug("Submit estimate exception", traceback.format_exc())
 
 st.divider()
-if st.button("Back to My Requests"):
-    st.switch_page("pages/my_request.py")
+_role = get_session_role()
+if _role == ROLE_ADMIN:
+    if st.button("Back to Admin dashboard"):
+        st.switch_page("pages/admin_dashboard.py")
+else:
+    if st.button("Back to Business portfolio"):
+        st.switch_page("pages/business_dashboard.py")
 
 render_footer_bug_panel()
