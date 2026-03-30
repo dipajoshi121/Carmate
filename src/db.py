@@ -221,17 +221,24 @@ def mark_reset_token_used(token: str):
     finally:
         conn.close()
 
-def create_service_request(user_id, vehicle: dict, service_type: str, description: str = ""):
+def create_service_request(user_id, vehicle: dict, service_type: str, description: str = "", preferred_date=None, preferred_time=None):
     conn = _conn()
     if not conn:
         return None
     try:
         with _cur(conn) as cur:
             cur.execute(
-                """INSERT INTO service_requests (user_id, vehicle, service_type, description, status)
-                   VALUES (%s, %s, %s, %s, 'Pending')
-                   RETURNING id, user_id, vehicle, service_type, description, status, estimate, created_at""",
-                (str(user_id), json.dumps(vehicle or {}), service_type or "Service", description or ""),
+                """INSERT INTO service_requests (user_id, vehicle, service_type, description, status, preferred_date, preferred_time)
+                   VALUES (%s, %s, %s, %s, 'Pending', %s, %s)
+                   RETURNING id, user_id, vehicle, service_type, description, status, estimate, created_at, preferred_date, preferred_time""",
+                (
+                    str(user_id),
+                    json.dumps(vehicle or {}),
+                    service_type or "Service",
+                    description or "",
+                    preferred_date,
+                    preferred_time,
+                ),
             )
             row = cur.fetchone()
         conn.commit()
@@ -254,7 +261,8 @@ def get_my_requests(user_id):
     try:
         with _cur(conn) as cur:
             cur.execute(
-                """SELECT id, user_id, vehicle, service_type, description, status, estimate, created_at, updated_at
+                """SELECT id, user_id, vehicle, service_type, description, status, estimate,
+                          created_at, updated_at, preferred_date, preferred_time
                    FROM service_requests WHERE user_id = %s ORDER BY created_at DESC""",
                 (str(user_id),),
             )
@@ -281,13 +289,15 @@ def get_request_by_id(request_id, user_id=None):
         with _cur(conn) as cur:
             if user_id:
                 cur.execute(
-                    """SELECT id, user_id, vehicle, service_type, description, status, estimate, created_at, updated_at
+                    """SELECT id, user_id, vehicle, service_type, description, status, estimate,
+                              created_at, updated_at, preferred_date, preferred_time
                        FROM service_requests WHERE id = %s AND user_id = %s LIMIT 1""",
                     (str(request_id), str(user_id)),
                 )
             else:
                 cur.execute(
-                    """SELECT id, user_id, vehicle, service_type, description, status, estimate, created_at, updated_at
+                    """SELECT id, user_id, vehicle, service_type, description, status, estimate,
+                              created_at, updated_at, preferred_date, preferred_time
                        FROM service_requests WHERE id = %s LIMIT 1""",
                     (str(request_id),),
                 )
@@ -417,5 +427,113 @@ def delete_request_photo(photo_id: str, request_id: str | None = None) -> bool:
     except Exception:
         conn.rollback()
         return False
+    finally:
+        conn.close()
+
+def create_payment_transaction(request_id: str, user_id: str, amount, currency: str = "USD", provider: str = "paypal", paypal_order_id: str | None = None, status: str = "created", raw_response=None):
+    conn = _conn()
+    if not conn:
+        return None
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """INSERT INTO payment_transactions (request_id, user_id, provider, currency, amount, status, paypal_order_id, raw_response)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                   RETURNING id, request_id, user_id, provider, currency, amount, status, paypal_order_id, paypal_capture_id, created_at""",
+                (
+                    str(request_id),
+                    str(user_id),
+                    provider or "paypal",
+                    (currency or "USD").upper(),
+                    amount,
+                    status or "created",
+                    paypal_order_id,
+                    json.dumps(raw_response) if raw_response is not None else None,
+                ),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+def update_payment_transaction_by_order(paypal_order_id: str, status: str, paypal_capture_id: str | None = None, failure_reason: str | None = None, raw_response=None):
+    conn = _conn()
+    if not conn:
+        return None
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """UPDATE payment_transactions
+                   SET status = %s,
+                       paypal_capture_id = COALESCE(%s, paypal_capture_id),
+                       failure_reason = %s,
+                       raw_response = COALESCE(%s, raw_response),
+                       updated_at = now()
+                   WHERE paypal_order_id = %s
+                   RETURNING id, request_id, user_id, provider, currency, amount, status, paypal_order_id, paypal_capture_id, updated_at""",
+                (
+                    status,
+                    paypal_capture_id,
+                    failure_reason,
+                    json.dumps(raw_response) if raw_response is not None else None,
+                    paypal_order_id,
+                ),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+def get_latest_payment_for_request(request_id: str):
+    conn = _conn()
+    if not conn:
+        return None
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """SELECT id, request_id, user_id, provider, currency, amount, status, paypal_order_id, paypal_capture_id, failure_reason, created_at, updated_at
+                   FROM payment_transactions
+                   WHERE request_id = %s
+                   ORDER BY created_at DESC
+                   LIMIT 1""",
+                (str(request_id),),
+            )
+            row = cur.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+def log_payment_webhook_event(provider: str, event_id: str | None, event_type: str | None, verified: bool, payload: dict):
+    conn = _conn()
+    if not conn:
+        return None
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """INSERT INTO payment_webhook_events (provider, event_id, event_type, verified, payload)
+                   VALUES (%s, %s, %s, %s, %s)
+                   RETURNING id, provider, event_id, event_type, verified, received_at""",
+                (
+                    provider or "paypal",
+                    event_id,
+                    event_type,
+                    bool(verified),
+                    json.dumps(payload or {}),
+                ),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        return None
     finally:
         conn.close()

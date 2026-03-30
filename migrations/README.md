@@ -10,6 +10,8 @@
 | `password_reset_tokens` | Forgot password flow |
 | `service_requests` | My requests, create request, request details, submit estimate |
 | `service_request_photos` | Upload vehicle photos (stores file path per request) |
+| `payment_transactions` | PayPal payment orders/captures, status/failure, raw response |
+| `payment_webhook_events` | PayPal webhook audit trail with signature verification result |
 
 ## Run migration
 
@@ -28,3 +30,4 @@ Use `src/db.py`. It expects `DATABASE_URL` in the environment.
 - **Password reset:** `create_password_reset_token`, `user_exists_by_email`, `get_valid_reset_token`, `mark_reset_token_used`
 - **Service requests:** `create_service_request`, `get_my_requests`, `get_request_by_id`, `update_request_estimate`, `update_estimate_status`
 - **Photos:** `add_request_photo`
+- **Payments:** `create_payment_transaction`, `update_payment_transaction_by_order`, `get_latest_payment_for_request`, `log_payment_webhook_event`

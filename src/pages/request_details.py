@@ -7,6 +7,7 @@ import streamlit as st
 
 from config import CFG
 from ui_helpers import require_login, auth_headers, log_bug, render_footer_bug_panel
+from payments import create_payment_request_api, capture_paypal_order, PaymentError
 
 REQUEST_DETAIL_URL = f"{CFG.API_BASE}/api/service-requests/{{}}"
 UPDATE_ESTIMATE_STATUS_URL = f"{CFG.API_BASE}/api/service-requests/{{}}/estimate/status"
@@ -284,6 +285,95 @@ if estimate:
                         except Exception as ex:
                             st.error("Error contacting server.")
                             log_bug("Reject estimate exception", str(ex))
+        elif est_status == "accepted":
+            st.subheader("Payment (PayPal Sandbox)")
+            payment_amount = total
+            try:
+                payment_amount = round(float(payment_amount), 2)
+            except Exception:
+                payment_amount = None
+
+            if payment_amount is None or payment_amount <= 0:
+                st.error("Payment amount is invalid. Please update the estimate total.")
+            else:
+                latest_payment = None
+                if os.environ.get("DATABASE_URL"):
+                    try:
+                        from db import get_latest_payment_for_request
+                        latest_payment = get_latest_payment_for_request(rid)
+                    except Exception as ex:
+                        st.error("Database error while loading payment history: " + str(ex))
+
+                if latest_payment:
+                    st.caption(
+                        f"Latest payment status: {latest_payment.get('status')} | "
+                        f"Order: {latest_payment.get('paypal_order_id') or '-'}"
+                    )
+                    if latest_payment.get("failure_reason"):
+                        st.caption("Failure reason: " + str(latest_payment.get("failure_reason")))
+
+                if st.button("Create PayPal Payment Request", key=f"create_pay_{rid}"):
+                    if not os.environ.get("DATABASE_URL"):
+                        st.error("DATABASE_URL is required so transactions can be stored.")
+                    elif not user_id:
+                        st.error("Missing user session. Please login again.")
+                    else:
+                        try:
+                            payment_request = create_payment_request_api(
+                                request_id=rid,
+                                user_id=user_id,
+                                amount=payment_amount,
+                                currency=currency,
+                                description=f"Carmate request {rid}",
+                            )
+                            st.success("Payment request created.")
+                            approve_url = payment_request.get("approve_url")
+                            if approve_url:
+                                st.markdown(f"[Approve payment in PayPal Sandbox]({approve_url})")
+                            st.session_state[f"payment_order_id_{rid}"] = payment_request.get("order_id")
+                        except PaymentError as ex:
+                            st.error(str(ex))
+                            log_bug("Create payment request error", str(ex))
+                        except Exception as ex:
+                            st.error("Unexpected payment error: " + str(ex))
+                            log_bug("Create payment request exception", traceback.format_exc())
+
+                default_order_id = st.session_state.get(f"payment_order_id_{rid}", "")
+                if not default_order_id and latest_payment:
+                    default_order_id = latest_payment.get("paypal_order_id") or ""
+                capture_order_id = st.text_input("PayPal Order ID to capture", value=default_order_id, key=f"capture_order_{rid}")
+
+                if st.button("Capture Payment", key=f"capture_pay_{rid}"):
+                    if not capture_order_id.strip():
+                        st.error("Order ID is required.")
+                    elif not os.environ.get("DATABASE_URL"):
+                        st.error("DATABASE_URL is required so transactions can be stored.")
+                    else:
+                        try:
+                            capture = capture_paypal_order(capture_order_id.strip())
+                            from db import update_payment_transaction_by_order
+                            update_payment_transaction_by_order(
+                                paypal_order_id=capture_order_id.strip(),
+                                status=(capture.get("status") or "completed").lower(),
+                                paypal_capture_id=capture.get("capture_id"),
+                                raw_response=capture.get("raw"),
+                            )
+                            st.success("Payment captured successfully.")
+                        except PaymentError as ex:
+                            try:
+                                from db import update_payment_transaction_by_order
+                                update_payment_transaction_by_order(
+                                    paypal_order_id=capture_order_id.strip(),
+                                    status="failed",
+                                    failure_reason=str(ex),
+                                )
+                            except Exception:
+                                pass
+                            st.error(str(ex))
+                            log_bug("Capture payment error", str(ex))
+                        except Exception as ex:
+                            st.error("Unexpected payment capture error: " + str(ex))
+                            log_bug("Capture payment exception", traceback.format_exc())
         else:
             st.info("This estimate is already finalized.")
 else:

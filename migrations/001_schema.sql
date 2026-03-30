@@ -38,6 +38,10 @@ CREATE INDEX IF NOT EXISTS idx_service_requests_user_id ON service_requests(user
 CREATE INDEX IF NOT EXISTS idx_service_requests_status ON service_requests(status);
 CREATE INDEX IF NOT EXISTS idx_service_requests_created_at ON service_requests(created_at DESC);
 
+ALTER TABLE service_requests
+  ADD COLUMN IF NOT EXISTS preferred_date DATE,
+  ADD COLUMN IF NOT EXISTS preferred_time TIME;
+
 CREATE TABLE IF NOT EXISTS service_request_photos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_id UUID NOT NULL REFERENCES service_requests(id) ON DELETE CASCADE,
@@ -45,3 +49,33 @@ CREATE TABLE IF NOT EXISTS service_request_photos (
   uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_service_request_photos_request_id ON service_request_photos(request_id);
+
+CREATE TABLE IF NOT EXISTS payment_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id UUID NOT NULL REFERENCES service_requests(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL DEFAULT 'paypal',
+  currency TEXT NOT NULL DEFAULT 'USD',
+  amount NUMERIC(12,2) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'created',
+  paypal_order_id TEXT,
+  paypal_capture_id TEXT,
+  failure_reason TEXT,
+  raw_response JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_payment_transactions_request_id ON payment_transactions(request_id);
+CREATE INDEX IF NOT EXISTS idx_payment_transactions_user_id ON payment_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_payment_transactions_paypal_order_id ON payment_transactions(paypal_order_id);
+
+CREATE TABLE IF NOT EXISTS payment_webhook_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider TEXT NOT NULL DEFAULT 'paypal',
+  event_id TEXT,
+  event_type TEXT,
+  verified BOOLEAN NOT NULL DEFAULT false,
+  payload JSONB NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_payment_webhook_events_event_id ON payment_webhook_events(event_id);

@@ -54,9 +54,10 @@ if submitted:
         except Exception:
             preferred_at = None
         user_id = st.session_state.get("user", {}).get("id") or st.session_state.get("token")
+        db_mode = bool(os.environ.get("DATABASE_URL"))
         used_db = False
 
-        if os.environ.get("DATABASE_URL") and user_id:
+        if db_mode and user_id:
             try:
                 from db import create_service_request
                 with st.spinner("Creating request..."):
@@ -79,10 +80,13 @@ if submitted:
                     if st.button("Go to My Requests"):
                         st.switch_page("pages/my_request.py")
                 else:
+                    used_db = True
                     st.error("Could not create request. Please try again.")
                     log_bug("Create request DB", "create_service_request returned None")
             except Exception as e:
+                used_db = True
                 st.error("Database error: " + str(e))
+                st.info("Check DATABASE_URL and run: python run_migration.py")
                 log_bug("Create request DB error", traceback.format_exc())
 
         if not used_db:
