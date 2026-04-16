@@ -42,14 +42,12 @@ def main():
     if not url:
         print("Set DATABASE_URL and run again.")
         sys.exit(1)
-    sql_path = os.path.join(os.path.dirname(__file__), "migrations", "001_schema.sql")
-    if not os.path.isfile(sql_path):
-        print(f"Migration file not found: {sql_path}")
-        sys.exit(1)
-    sql = open(sql_path, encoding="utf-8").read()
-    statements = split_sql_statements(sql)
-    if not statements:
-        print("No SQL statements found in migration file.")
+    mig_dir = os.path.join(os.path.dirname(__file__), "migrations")
+    sql_files = sorted(
+        f for f in os.listdir(mig_dir) if f.endswith(".sql") and os.path.isfile(os.path.join(mig_dir, f))
+    )
+    if not sql_files:
+        print(f"No .sql files in {mig_dir}")
         sys.exit(1)
 
     import psycopg2
@@ -57,14 +55,24 @@ def main():
     conn = psycopg2.connect(url)
     try:
         conn.autocommit = True
+        total_st = 0
         with conn.cursor() as cur:
-            for i, stmt in enumerate(statements, 1):
-                try:
-                    cur.execute(stmt)
-                except Exception as e:
-                    print(f"Statement {i} failed:\n{stmt[:200]}...\nError: {e}")
-                    raise
-        print(f"Migration completed ({len(statements)} statements).")
+            for fname in sql_files:
+                sql_path = os.path.join(mig_dir, fname)
+                sql = open(sql_path, encoding="utf-8").read()
+                statements = split_sql_statements(sql)
+                if not statements:
+                    print(f"Skip (no statements): {fname}")
+                    continue
+                print(f"Running {fname} ({len(statements)} statements)...")
+                for i, stmt in enumerate(statements, 1):
+                    try:
+                        cur.execute(stmt)
+                    except Exception as e:
+                        print(f"  Statement {i} failed:\n{stmt[:200]}...\nError: {e}")
+                        raise
+                total_st += len(statements)
+        print(f"Migration completed ({total_st} statements across {len(sql_files)} file(s)).")
         with conn.cursor() as cur:
             cur.execute(
                 """

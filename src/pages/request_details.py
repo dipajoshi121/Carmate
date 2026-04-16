@@ -134,6 +134,7 @@ if not r:
 bcid = (r.get("businessCreatorId") or "").strip()
 owner_uid = (r.get("ownerUserId") or "").strip()
 is_customer_owner = role == ROLE_USER and owner_uid and str(owner_uid) == str(user_id)
+is_shop_for_request = role == ROLE_BUSINESS and bcid and str(bcid) == str(user_id)
 can_submit_estimate = role in (ROLE_BUSINESS, ROLE_ADMIN)
 can_edit_request = role == ROLE_ADMIN or (role == ROLE_BUSINESS and bcid and str(bcid) == str(user_id))
 can_manage_photos = role == ROLE_ADMIN or is_customer_owner or (role == ROLE_BUSINESS and bcid and str(bcid) == str(user_id))
@@ -160,6 +161,23 @@ with st.container(border=True):
             when_bits.append(preferred_time_str)
         label = "Your preferred time" if role == ROLE_USER else "Preferred service time"
         st.caption(label + ": " + " at ".join(when_bits))
+
+    if is_customer_owner and status in ("Pending", "Quoted"):
+        st.caption("You can cancel this appointment before work has started.")
+        if os.environ.get("DATABASE_URL") and user_id:
+            if st.button("Cancel appointment", key=f"cancel_appt_{rid}"):
+                try:
+                    from db import cancel_service_request_by_owner
+
+                    out = cancel_service_request_by_owner(rid, user_id)
+                    if out:
+                        st.success("Appointment cancelled.")
+                        st.rerun()
+                    else:
+                        st.error("Could not cancel. It may already be in progress or was removed.")
+                except Exception as ex:
+                    st.error("Database error: " + str(ex))
+                    log_bug("cancel appointment", str(ex))
 
 if role == ROLE_BUSINESS:
     st.caption("Submit an estimate from this page or the Submit Estimate page.")
@@ -250,7 +268,7 @@ else:
 
 estimate = (r.get("estimate") or {})
 if estimate:
-    st.subheader("Estimate")
+    st.subheader("Cost breakdown & estimate")
 
     currency = estimate.get("currency", "USD")
     labor = estimate.get("labor", 0)
@@ -269,11 +287,24 @@ if estimate:
             total = ""
 
     with st.container(border=True):
-        st.markdown(f"**Total:** {currency} {total}")
-        st.write(f"Labor: {currency} {labor}")
-        st.write(f"Parts: {currency} {parts}")
-        st.write(f"Tax: {currency} {tax}")
-        st.write(f"Fees: {currency} {fees}")
+        try:
+            tnum = float(total) if total is not None and total != "" else 0.0
+        except Exception:
+            tnum = 0.0
+        st.dataframe(
+            {
+                "Line item": ["Labor", "Parts", "Tax", "Fees", "Total"],
+                f"Amount ({currency})": [
+                    labor,
+                    parts,
+                    tax,
+                    fees,
+                    round(tnum, 2),
+                ],
+            },
+            hide_index=True,
+            use_container_width=True,
+        )
 
         if valid_until:
             st.caption(f"Valid until: {valid_until}")
@@ -445,6 +476,82 @@ if estimate:
             st.info("This estimate is already finalized.")
 else:
     st.info("No estimate has been submitted yet.")
+
+if os.environ.get("DATABASE_URL") and user_id:
+    try:
+        from db import (
+            create_review_report,
+            get_review_for_request,
+            set_provider_review_response,
+            upsert_request_review,
+        )
+
+        review_row = get_review_for_request(rid)
+        is_completed = (status or "").strip() == "Completed"
+
+        st.subheader("Reviews & ratings")
+
+        if review_row:
+            rt = int(review_row.get("rating") or 0)
+            st.markdown("**" + "★" * rt + "☆" * max(0, 5 - rt) + f"** ({rt}/5)")
+            if review_row.get("comment"):
+                st.write(review_row.get("comment"))
+            if review_row.get("provider_response"):
+                st.info("**Provider reply:** " + str(review_row.get("provider_response")))
+
+            rev_id = str(review_row.get("id"))
+            if str(review_row.get("reviewer_user_id")) != str(user_id):
+                with st.expander("Report this review"):
+                    rreason = st.text_area("Reason", key=f"report_reason_{rid}", placeholder="Why should this be reviewed?")
+                    if st.button("Submit report", key=f"report_submit_{rid}"):
+                        res = create_review_report(rev_id, user_id, rreason)
+                        if res:
+                            st.success("Report submitted. An administrator will review it.")
+                            st.rerun()
+                        else:
+                            st.error("Could not submit report.")
+
+        if is_completed and is_customer_owner:
+            st.caption("Share feedback on your completed service.")
+            prev_r = int(review_row.get("rating") or 5) if review_row else 5
+            prev_c = (review_row.get("comment") or "") if review_row else ""
+            with st.form("customer_review_form"):
+                stars = st.slider("Rating", 1, 5, prev_r, key=f"rv_st_{rid}")
+                cmt = st.text_area("Comments", value=prev_c, key=f"rv_cmt_{rid}")
+                submitted_rv = st.form_submit_button("Submit review" if not review_row else "Update review")
+                if submitted_rv:
+                    out = upsert_request_review(rid, user_id, stars, cmt)
+                    if out:
+                        st.success("Thank you — your review was saved.")
+                        st.rerun()
+                    else:
+                        st.error("Could not save review.")
+
+        if review_row and is_shop_for_request:
+            with st.form("provider_feedback_form"):
+                st.caption("Public reply visible to the customer.")
+                pf = st.text_area(
+                    "Provider feedback",
+                    value=review_row.get("provider_response") or "",
+                    key=f"pf_{rid}",
+                    height=100,
+                )
+                if st.form_submit_button("Save provider reply"):
+                    out = set_provider_review_response(rid, user_id, pf)
+                    if out:
+                        st.success("Reply saved.")
+                        st.rerun()
+                    else:
+                        st.error("Could not save reply. Check that your shop is assigned to this request.")
+
+        if not review_row and not (is_completed and is_customer_owner):
+            st.caption(
+                "Customer reviews appear here after the job is marked **Completed**. "
+                "Anyone can browse shop averages under **View ratings** in the menu."
+            )
+    except Exception as ex:
+        st.caption("Reviews require database access: " + str(ex))
+        log_bug("request details reviews", traceback.format_exc())
 
 st.divider()
 if role == ROLE_USER:

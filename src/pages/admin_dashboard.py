@@ -96,6 +96,46 @@ else:
                     st.session_state["selected_request_id"] = vid
                     st.switch_page("pages/request_details.py")
 
+    st.divider()
+    st.subheader("Reported reviews")
+    try:
+        from db import list_open_review_reports, resolve_review_report
+
+        reports = list_open_review_reports()
+    except Exception:
+        log_bug("admin review reports", traceback.format_exc())
+        reports = []
+    if not reports:
+        st.caption("No open review reports.")
+    else:
+        for rp in reports:
+            rid_rp = str(rp.get("id", ""))
+            with st.container(border=True):
+                st.write(f"Request **{rp.get('request_id')}** — reported rating: {rp.get('rating')}")
+                if rp.get("comment"):
+                    st.caption("Review text: " + str(rp.get("comment")))
+                st.caption("Reason: " + str(rp.get("reason") or "—"))
+                notes = st.text_input("Admin notes (optional)", key=f"adm_rr_notes_{rid_rp}")
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Dismiss", key=f"adm_rr_dis_{rid_rp}"):
+                        try:
+                            resolve_review_report(rid_rp, "dismissed", notes)
+                            st.success("Dismissed.")
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(str(ex))
+                            log_bug("resolve report", str(ex))
+                with c2:
+                    if st.button("Mark resolved", key=f"adm_rr_ok_{rid_rp}"):
+                        try:
+                            resolve_review_report(rid_rp, "resolved", notes)
+                            st.success("Resolved.")
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(str(ex))
+                            log_bug("resolve report", str(ex))
+
 st.divider()
 if st.button("Registered users (details & activate)"):
     st.switch_page("pages/view_users_registration.py")

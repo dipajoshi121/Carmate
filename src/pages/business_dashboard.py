@@ -49,6 +49,17 @@ mine = [r for r in all_req if str(r.get("business_creator_id") or "") == str(uid
 st.metric("Requests your business logged", len(mine))
 st.caption(f"Total requests in system: **{len(all_req)}**")
 
+try:
+    from db import business_rating_summary
+
+    br = business_rating_summary(uid)
+    if br and int(br.get("review_count") or 0) > 0 and br.get("avg_rating") is not None:
+        st.metric("Your average rating", f"{float(br['avg_rating']):.2f} / 5", f"{int(br['review_count'])} review(s)")
+    else:
+        st.caption("Reviews will show here after customers complete jobs and submit ratings.")
+except Exception:
+    pass
+
 c1, c2, c3 = st.columns(3)
 with c1:
     if st.button("Create request", use_container_width=True):

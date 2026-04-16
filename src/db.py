@@ -633,3 +633,243 @@ def log_payment_webhook_event(provider: str, event_id: str | None, event_type: s
         return None
     finally:
         conn.close()
+
+
+def cancel_service_request_by_owner(request_id, owner_user_id) -> dict | None:
+    """Set status to Cancelled if the customer owns the request and it is not yet in progress."""
+    conn = _conn()
+    if not conn:
+        return None
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """UPDATE service_requests SET status = 'Cancelled', updated_at = now()
+                   WHERE id = %s AND user_id = %s AND status IN ('Pending', 'Quoted')
+                   RETURNING id, user_id, vehicle, service_type, description, status, estimate, created_at, business_creator_id""",
+                (str(request_id), str(owner_user_id)),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        if not row:
+            return None
+        o = dict(row)
+        o["vehicle"] = _json(o.get("vehicle"))
+        o["estimate"] = _json(o.get("estimate"))
+        return o
+    except Exception:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+
+def get_review_for_request(request_id: str) -> dict | None:
+    conn = _conn()
+    if not conn:
+        return None
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """SELECT id, request_id, reviewer_user_id, rating, comment, provider_response,
+                          provider_responded_at, created_at, updated_at
+                   FROM request_reviews WHERE request_id = %s LIMIT 1""",
+                (str(request_id),),
+            )
+            row = cur.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def upsert_request_review(request_id: str, reviewer_user_id, rating: int, comment: str | None) -> dict | None:
+    conn = _conn()
+    if not conn:
+        return None
+    r = int(rating)
+    if r < 1 or r > 5:
+        return None
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """SELECT id, reviewer_user_id FROM request_reviews WHERE request_id = %s LIMIT 1""",
+                (str(request_id),),
+            )
+            existing = cur.fetchone()
+            if existing:
+                if str(existing.get("reviewer_user_id")) != str(reviewer_user_id):
+                    return None
+                cur.execute(
+                    """UPDATE request_reviews SET rating = %s, comment = %s, updated_at = now()
+                       WHERE request_id = %s AND reviewer_user_id = %s
+                       RETURNING id, request_id, reviewer_user_id, rating, comment, provider_response,
+                                 provider_responded_at, created_at, updated_at""",
+                    (r, (comment or "").strip() or None, str(request_id), str(reviewer_user_id)),
+                )
+            else:
+                cur.execute(
+                    """INSERT INTO request_reviews (request_id, reviewer_user_id, rating, comment)
+                       VALUES (%s, %s, %s, %s)
+                       RETURNING id, request_id, reviewer_user_id, rating, comment, provider_response,
+                                 provider_responded_at, created_at, updated_at""",
+                    (str(request_id), str(reviewer_user_id), r, (comment or "").strip() or None),
+                )
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+
+def set_provider_review_response(request_id: str, business_user_id: str, response: str) -> dict | None:
+    conn = _conn()
+    if not conn:
+        return None
+    text = (response or "").strip()
+    if not text:
+        return None
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """UPDATE request_reviews rr SET
+                       provider_response = %s,
+                       provider_responded_at = now(),
+                       updated_at = now()
+                   FROM service_requests sr
+                   WHERE rr.request_id = sr.id
+                     AND rr.request_id = %s
+                     AND sr.business_creator_id IS NOT NULL
+                     AND sr.business_creator_id::text = %s
+                   RETURNING rr.id, rr.request_id, rr.reviewer_user_id, rr.rating, rr.comment,
+                             rr.provider_response, rr.provider_responded_at, rr.created_at, rr.updated_at""",
+                (text, str(request_id), str(business_user_id)),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+
+def create_review_report(review_id: str, reporter_user_id: str, reason: str) -> dict | None:
+    conn = _conn()
+    if not conn:
+        return None
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """SELECT reviewer_user_id FROM request_reviews WHERE id = %s LIMIT 1""",
+                (str(review_id),),
+            )
+            rev = cur.fetchone()
+            if not rev or str(rev.get("reviewer_user_id")) == str(reporter_user_id):
+                return None
+            cur.execute(
+                """INSERT INTO review_reports (review_id, reporter_user_id, reason, status)
+                   VALUES (%s, %s, %s, 'open')
+                   RETURNING id, review_id, reporter_user_id, reason, status, created_at""",
+                (str(review_id), str(reporter_user_id), (reason or "").strip() or None),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+
+def list_open_review_reports():
+    conn = _conn()
+    if not conn:
+        return []
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """SELECT rp.id, rp.review_id, rp.reporter_user_id, rp.reason, rp.status, rp.created_at,
+                          rev.request_id, rev.rating, rev.comment, rev.reviewer_user_id
+                   FROM review_reports rp
+                   JOIN request_reviews rev ON rev.id = rp.review_id
+                   WHERE rp.status = 'open'
+                   ORDER BY rp.created_at DESC"""
+            )
+            return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def resolve_review_report(report_id: str, status: str, admin_notes: str | None = None) -> dict | None:
+    resolved_status = (status or "").strip().lower()
+    if resolved_status not in ("dismissed", "resolved"):
+        return None
+    conn = _conn()
+    if not conn:
+        return None
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """UPDATE review_reports SET status = %s, resolved_at = now(), admin_notes = %s
+                   WHERE id = %s AND status = 'open'
+                   RETURNING id, review_id, status, resolved_at, admin_notes""",
+                (resolved_status, (admin_notes or "").strip() or None, str(report_id)),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+
+def business_rating_summary(business_user_id: str) -> dict | None:
+    conn = _conn()
+    if not conn:
+        return None
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """SELECT ROUND(AVG(rr.rating)::numeric, 2) AS avg_rating, COUNT(rr.id)::int AS review_count
+                   FROM service_requests sr
+                   INNER JOIN request_reviews rr ON rr.request_id = sr.id
+                   WHERE sr.business_creator_id::text = %s""",
+                (str(business_user_id),),
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        o = dict(row)
+        if o.get("review_count") == 0:
+            return {"avg_rating": None, "review_count": 0}
+        return o
+    finally:
+        conn.close()
+
+
+def list_businesses_with_ratings():
+    conn = _conn()
+    if not conn:
+        return []
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """SELECT u.id, u.email, u.full_name,
+                          ROUND(AVG(rr.rating)::numeric, 2) AS avg_rating,
+                          COUNT(rr.id)::int AS review_count
+                   FROM users u
+                   LEFT JOIN service_requests sr ON sr.business_creator_id = u.id
+                   LEFT JOIN request_reviews rr ON rr.request_id = sr.id
+                   WHERE u.role = 'business'
+                   GROUP BY u.id, u.email, u.full_name
+                   ORDER BY avg_rating DESC NULLS LAST, u.full_name NULLS LAST"""
+            )
+            return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()

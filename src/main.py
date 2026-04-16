@@ -50,6 +50,7 @@ pages_logged_out = {
         _p("pages/my_request.py", "My Requests"),
         _p("pages/service_request.py", "Create Request"),
         _p("pages/request_details.py", "Request Details"),
+        _p("pages/view_ratings.py", "View ratings"),
         _p("pages/submit_estimate.py", "Submit Estimate"),
         _p("pages/upload_vechile_photos.py", "Upload Photos"),
     ],
@@ -77,6 +78,7 @@ pages_customer = {
         _p("pages/my_request.py", "My Requests"),
         _p("pages/service_request.py", "Create Request"),
         _p("pages/request_details.py", "Request Details"),
+        _p("pages/view_ratings.py", "View ratings"),
         _p("pages/upload_vechile_photos.py", "Upload Photos"),
     ],
     "Profile": [
@@ -95,6 +97,7 @@ pages_business = {
     "Services": [
         _p("pages/service_request.py", "Create Request"),
         _p("pages/request_details.py", "Request Details"),
+        _p("pages/view_ratings.py", "View ratings"),
         _p("pages/submit_estimate.py", "Submit Estimate"),
         _p("pages/upload_vechile_photos.py", "Upload Photos"),
     ],
