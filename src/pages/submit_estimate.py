@@ -98,11 +98,19 @@ if submitted:
                     or st.session_state.get("user", {}).get("email")
                     or "Business"
                 )
+                biz_address = (
+                    st.session_state.get("user", {}).get("address")
+                    or st.session_state.get("user", {}).get("businessAddress")
+                    or ""
+                )
+                biz_label = str(biz_name).strip()
+                if biz_address and str(biz_address).strip():
+                    biz_label = f"{biz_label} | {str(biz_address).strip()}"
                 with st.spinner("Submitting estimate..."):
                     result = upsert_request_estimate(
                         request_id=req_id_clean,
                         business_user_id=str(biz_uid),
-                        business_name=str(biz_name),
+                        business_name=biz_label,
                         estimate=estimate_payload,
                     )
                 if result:

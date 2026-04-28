@@ -36,10 +36,15 @@ def _render_public_ratings_preview():
         else:
             for row in rated[:5]:
                 name = (row.get("full_name") or "").strip() or (row.get("email") or "Business")
+                address = (row.get("address") or "").strip()
                 avg = float(row.get("avg_rating") or 0)
                 cnt = int(row.get("review_count") or 0)
                 stars = min(5, max(1, int(round(avg))))
-                st.markdown(f"**{name}** — " + ("★" * stars + "☆" * (5 - stars)) + f" ({avg:.2f}/5, {cnt} review(s))")
+                label = f"**{name}**"
+                if address:
+                    label += f" — {address}"
+                label += " — " + ("★" * stars + "☆" * (5 - stars)) + f" ({avg:.2f}/5, {cnt} review(s))"
+                st.markdown(label)
     if st.button("View all public ratings", use_container_width=True, key="home_public_ratings"):
         st.switch_page("pages/view_ratings.py")
 

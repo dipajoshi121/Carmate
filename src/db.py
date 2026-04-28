@@ -42,20 +42,40 @@ def _json(val):
         return val
     return json.loads(val) if isinstance(val, str) else val
 
-def create_user(email: str, password: str, full_name: str = None, phone: str = None, role: str = "user"):
+
+def _ensure_users_address_column(conn):
+    with _cur(conn, dict_cursor=False) as cur:
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT")
+
+def create_user(
+    email: str,
+    password: str,
+    full_name: str = None,
+    phone: str = None,
+    role: str = "user",
+    address: str = None,
+):
     conn = _conn()
     if not conn:
         return None
+    _ensure_users_address_column(conn)
     r = (role or "user").strip().lower()
     if r not in ("user", "business", "admin"):
         r = "user"
     try:
         with _cur(conn) as cur:
             cur.execute(
-                """INSERT INTO users (email, password_hash, full_name, phone, role)
-                   VALUES (%s, %s, %s, %s, %s)
-                   RETURNING id, email, full_name, phone, is_active, role, created_at""",
-                (email.strip().lower(), _hash_password(password), full_name or "", phone or "", r),
+                """INSERT INTO users (email, password_hash, full_name, phone, role, address)
+                   VALUES (%s, %s, %s, %s, %s, %s)
+                   RETURNING id, email, full_name, phone, address, is_active, role, created_at""",
+                (
+                    email.strip().lower(),
+                    _hash_password(password),
+                    full_name or "",
+                    phone or "",
+                    r,
+                    (address or "").strip() or None,
+                ),
             )
             row = cur.fetchone()
         conn.commit()
@@ -70,10 +90,11 @@ def get_user_by_email(email: str):
     conn = _conn()
     if not conn:
         return None
+    _ensure_users_address_column(conn)
     try:
         with _cur(conn) as cur:
             cur.execute(
-                "SELECT id, email, password_hash, full_name, phone, is_active, role, created_at, updated_at FROM users WHERE email = %s LIMIT 1",
+                "SELECT id, email, password_hash, full_name, phone, address, is_active, role, created_at, updated_at FROM users WHERE email = %s LIMIT 1",
                 (email.strip().lower(),),
             )
             row = cur.fetchone()
@@ -89,10 +110,11 @@ def get_user_by_id(user_id) -> dict | None:
     conn = _conn()
     if not conn:
         return None
+    _ensure_users_address_column(conn)
     try:
         with _cur(conn) as cur:
             cur.execute(
-                "SELECT id, email, full_name, phone, is_active, role, created_at, updated_at FROM users WHERE id = %s LIMIT 1",
+                "SELECT id, email, full_name, phone, address, is_active, role, created_at, updated_at FROM users WHERE id = %s LIMIT 1",
                 (str(user_id),),
             )
             row = cur.fetchone()
@@ -111,10 +133,18 @@ def verify_password(email: str, password: str) -> dict | None:
         out["role"] = "user"
     return out
 
-def update_user(user_id, full_name: str = None, email: str = None, phone: str = None, password: str = None):
+def update_user(
+    user_id,
+    full_name: str = None,
+    email: str = None,
+    phone: str = None,
+    password: str = None,
+    address: str = None,
+):
     conn = _conn()
     if not conn:
         return None
+    _ensure_users_address_column(conn)
     try:
         updates = ["updated_at = now()"]
         args = []
@@ -127,13 +157,16 @@ def update_user(user_id, full_name: str = None, email: str = None, phone: str = 
         if phone is not None:
             updates.append("phone = %s")
             args.append(phone)
+        if address is not None:
+            updates.append("address = %s")
+            args.append((address or "").strip() or None)
         if password:
             updates.append("password_hash = %s")
             args.append(_hash_password(password))
         args.append(str(user_id))
         with _cur(conn) as cur:
             cur.execute(
-                f"UPDATE users SET {', '.join(updates)} WHERE id = %s RETURNING id, email, full_name, phone, is_active",
+                f"UPDATE users SET {', '.join(updates)} WHERE id = %s RETURNING id, email, full_name, phone, address, is_active, role",
                 args,
             )
             row = cur.fetchone()
@@ -149,10 +182,11 @@ def list_users():
     conn = _conn()
     if not conn:
         return []
+    _ensure_users_address_column(conn)
     try:
         with _cur(conn) as cur:
             cur.execute(
-                "SELECT id, email, full_name, phone, is_active, role, created_at FROM users ORDER BY created_at DESC"
+                "SELECT id, email, full_name, phone, address, is_active, role, created_at FROM users ORDER BY created_at DESC"
             )
             return [dict(r) for r in cur.fetchall()]
     finally:
@@ -1059,10 +1093,11 @@ def list_businesses_with_ratings():
     conn = _conn()
     if not conn:
         return []
+    _ensure_users_address_column(conn)
     try:
         with _cur(conn) as cur:
             cur.execute(
-                """SELECT u.id, u.email, u.full_name,
+                """SELECT u.id, u.email, u.full_name, u.address,
                           ROUND(AVG(rb.rating)::numeric, 2) AS avg_rating,
                           COUNT(rb.review_id)::int AS review_count
                    FROM users u
@@ -1084,7 +1119,7 @@ def list_businesses_with_ratings():
                        WHERE COALESCE(acc.business_user_id, sr.business_creator_id) IS NOT NULL
                    ) rb ON rb.rated_business_id = u.id
                    WHERE u.role = 'business'
-                   GROUP BY u.id, u.email, u.full_name
+                   GROUP BY u.id, u.email, u.full_name, u.address
                    ORDER BY avg_rating DESC NULLS LAST, u.full_name NULLS LAST"""
             )
             return [dict(r) for r in cur.fetchall()]

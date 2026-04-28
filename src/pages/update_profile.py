@@ -28,6 +28,7 @@ if "token" not in st.session_state:
 
 user_id = st.session_state.get("user", {}).get("id") or st.session_state.get("token")
 user_data = st.session_state.get("user", {})
+role = (user_data.get("role") or "").strip().lower()
 if os.environ.get("DATABASE_URL") and user_id:
     try:
         from db import get_user_by_id
@@ -37,6 +38,8 @@ if os.environ.get("DATABASE_URL") and user_id:
                 "fullName": db_user.get("full_name") or "",
                 "email": db_user.get("email") or "",
                 "phone": db_user.get("phone") or "",
+                "address": db_user.get("address") or "",
+                "role": db_user.get("role") or role,
             }
     except Exception:
         pass
@@ -47,6 +50,8 @@ if not user_data.get("email"):
     user_data.setdefault("email", "")
 if not user_data.get("phone"):
     user_data.setdefault("phone", "")
+if not user_data.get("address"):
+    user_data.setdefault("address", "")
 
 st.title("Update Your Profile")
 st.write("Update your profile information below.")
@@ -61,6 +66,7 @@ with st.form("update_profile_form", clear_on_submit=False):
     full_name = st.text_input("Full Name", placeholder="e.g., Arjun Khatri", value=display_name)
     email = st.text_input("Email", placeholder="e.g., arjun@example.com", value=user_data.get("email", ""))
     phone = st.text_input("Phone Number", placeholder="e.g., +1 555-555-5555", value=user_data.get("phone", ""))
+    address = st.text_input("Address", placeholder="e.g., 123 Main St, City", value=user_data.get("address", ""))
     password = st.text_input("Password", type="password", placeholder="Leave blank if unchanged")
     confirm_password = st.text_input("Confirm Password", type="password", placeholder="Leave blank if unchanged")
 
@@ -102,6 +108,7 @@ if submit_button:
                         full_name=full_name.strip(),
                         email=email.strip().lower(),
                         phone=phone.strip(),
+                        address=address.strip() if address else None,
                         password=password if password else None,
                     )
                 if updated:
@@ -111,7 +118,9 @@ if submit_button:
                         "email": updated.get("email"),
                         "fullName": updated.get("full_name"),
                         "phone": updated.get("phone"),
+                        "address": updated.get("address"),
                         "isActive": updated.get("is_active"),
+                        "role": updated.get("role") or role,
                     }
                     st.success(" Profile updated successfully!")
                     st.json({
@@ -119,6 +128,7 @@ if submit_button:
                         "fullName": st.session_state["user"]["fullName"],
                         "email": st.session_state["user"]["email"],
                         "phone": st.session_state["user"].get("phone", ""),
+                        "address": st.session_state["user"].get("address", ""),
                         "isActive": st.session_state["user"].get("isActive", True),
                     })
                 else:
@@ -132,6 +142,7 @@ if submit_button:
                 "fullName": full_name.strip(),
                 "email": email.strip().lower(),
                 "phone": phone.strip(),
+                "address": address.strip(),
             }
             if password:
                 payload["password"] = password

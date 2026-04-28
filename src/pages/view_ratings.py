@@ -39,10 +39,13 @@ else:
         else:
             for row in rows:
                 name = (row.get("full_name") or "").strip() or (row.get("email") or "Shop")
+                address = (row.get("address") or "").strip()
                 cnt = int(row.get("review_count") or 0)
                 avg = row.get("avg_rating")
                 with st.container(border=True):
                     st.markdown(f"**{name}**")
+                    if address:
+                        st.caption(address)
                     if cnt > 0 and avg is not None:
                         avg_f = float(avg)
                         stars = min(5, max(1, int(round(avg_f))))

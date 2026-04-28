@@ -152,6 +152,7 @@ if submitted:
                             "email": user.get("email"),
                             "fullName": user.get("full_name"),
                             "phone": user.get("phone"),
+                            "address": user.get("address"),
                             "isActive": user.get("is_active"),
                             "role": acc_role,
                         }

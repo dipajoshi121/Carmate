@@ -45,6 +45,7 @@ def fetch_users():
                     "name": r.get("full_name") or r.get("email") or "",
                     "full_name": r.get("full_name"),
                     "phone": r.get("phone"),
+                    "address": r.get("address"),
                     "is_active": bool(r.get("is_active", True)),
                     "role": (r.get("role") or "user"),
                     "created_at": r.get("created_at"),
@@ -119,6 +120,8 @@ elif users:
             st.markdown(f"**{name}** — *{email}*")
             if user.get("phone"):
                 st.caption(f"Phone: {user.get('phone')}")
+            if user.get("address"):
+                st.caption(f"Address: {user.get('address')}")
             st.caption(f"Status: {'Active' if is_active else 'Inactive'} | Role: **{user.get('role', 'user')}**")
             if st.button(f"Toggle Status for {name}", key=f"toggle_{uid}"):
                 if toggle_user_status(uid, is_active):

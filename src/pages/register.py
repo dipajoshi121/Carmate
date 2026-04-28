@@ -59,6 +59,9 @@ else:
 with st.form("register_form", clear_on_submit=False):
     full_name = st.text_input("Full name", placeholder="e.g., Arjun Khatri")
     email = st.text_input("Email", placeholder="e.g., arjun@example.com")
+    business_address = ""
+    if reg_intent == ROLE_BUSINESS:
+        business_address = st.text_input("Business address", placeholder="e.g., 123 Main St, City")
     password = st.text_input("Password", type="password", placeholder="Choose a password")
     confirm_password = st.text_input("Confirm password", type="password", placeholder="Confirm your password")
     submitted = st.form_submit_button("Register")
@@ -69,6 +72,8 @@ if submitted:
         errors.append("Full name is required (at least 2 characters).")
     if not is_valid_email(email):
         errors.append("Please enter a valid email address.")
+    if reg_intent == ROLE_BUSINESS and (not business_address or len(business_address.strip()) < 5):
+        errors.append("Business address is required for business accounts.")
     if not password or len(password) < 8:
         errors.append("Password must be at least 8 characters.")
     if password and not re.search(r"[A-Za-z]", password):
@@ -93,7 +98,14 @@ if submitted:
                     used_db = True
                 else:
                     new_role = ROLE_BUSINESS if reg_intent == ROLE_BUSINESS else ROLE_USER
-                    user = create_user(email_clean, password, full_name_clean, phone=None, role=new_role)
+                    user = create_user(
+                        email_clean,
+                        password,
+                        full_name_clean,
+                        phone=None,
+                        role=new_role,
+                        address=business_address.strip() if reg_intent == ROLE_BUSINESS else None,
+                    )
                     if user:
                         used_db = True
                         st.success("Account created. You can now log in.")
@@ -103,6 +115,7 @@ if submitted:
                             "email": user.get("email"),
                             "fullName": user.get("full_name"),
                             "phone": user.get("phone"),
+                            "address": user.get("address"),
                             "isActive": user.get("is_active"),
                             "role": (user.get("role") or new_role),
                         }
@@ -130,6 +143,7 @@ if submitted:
                             "email": email_clean,
                             "password": password,
                             "role": new_role,
+                            "address": business_address.strip() if reg_intent == ROLE_BUSINESS else None,
                         },
                         timeout=10,
                     )
