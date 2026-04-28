@@ -186,6 +186,24 @@ elif role == ROLE_ADMIN:
     st.caption("You can edit this request and override details.")
 
 if can_edit_request and os.environ.get("DATABASE_URL"):
+    if (status or "").strip().lower() != "completed":
+        if st.button("Mark work as completed", key=f"mark_completed_{rid}"):
+            try:
+                from db import update_service_request_fields
+
+                out = update_service_request_fields(rid, status="Completed")
+                if out:
+                    st.success("Job marked as completed.")
+                    st.rerun()
+                else:
+                    st.error("Could not mark this request as completed.")
+            except Exception as ex:
+                st.error("Database error: " + str(ex))
+                log_bug("mark completed", str(ex))
+    else:
+        st.caption("This request is already marked as completed.")
+
+if can_edit_request and os.environ.get("DATABASE_URL"):
     status_choices = ["Pending", "Quoted", "In Progress", "Completed", "Cancelled"]
     cur_status = status if status in status_choices else status_choices[0]
     st_idx = status_choices.index(cur_status) if cur_status in status_choices else 0
