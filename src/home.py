@@ -53,6 +53,7 @@ if token and qrole == ROLE_BUSINESS:
     if st.button("Log out", use_container_width=True):
         perform_logout()
         st.switch_page("home.py")
+    _render_public_ratings_preview()
     st.caption("Use the top menu: Create request, Submit estimate, Upload photos, Profile.")
     st.stop()
 
@@ -90,6 +91,7 @@ if token and qrole == ROLE_ADMIN:
     if st.button("Log out", use_container_width=True):
         perform_logout()
         st.switch_page("home.py")
+    _render_public_ratings_preview()
     st.caption("Use the top menu for full navigation.")
     st.stop()
 

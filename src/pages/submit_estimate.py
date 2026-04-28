@@ -30,6 +30,18 @@ require_role(ROLE_BUSINESS, ROLE_ADMIN)
 
 st.title("Submit Estimate")
 st.write("Submit an estimated cost so the customer knows the expected service cost.")
+if os.environ.get("DATABASE_URL"):
+    try:
+        from db import business_rating_summary
+
+        _biz_uid = st.session_state.get("user", {}).get("id") or st.session_state.get("token")
+        _summary = business_rating_summary(str(_biz_uid)) if _biz_uid else None
+        _rc = int((_summary or {}).get("review_count") or 0)
+        _avg = (_summary or {}).get("avg_rating")
+        if _rc > 0 and _avg is not None:
+            st.caption(f"Your public rating: {float(_avg):.2f}/5 based on {_rc} review(s).")
+    except Exception:
+        pass
 
 prefill_rid = st.session_state.get("selected_request_id", "")
 request_id = st.text_input("Service Request ID", value=prefill_rid, placeholder="Paste the request ID here")
