@@ -229,6 +229,25 @@ def mark_reset_token_used(token: str):
     finally:
         conn.close()
 
+
+def update_password_by_email(email: str, new_password: str) -> bool:
+    conn = _conn()
+    if not conn:
+        return False
+    try:
+        with _cur(conn, dict_cursor=False) as cur:
+            cur.execute(
+                "UPDATE users SET password_hash = %s, updated_at = now() WHERE email = %s",
+                (_hash_password(new_password), email.strip().lower()),
+            )
+        conn.commit()
+        return cur.rowcount > 0
+    except Exception:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
 def create_service_request(user_id, vehicle: dict, service_type: str, description: str = "", preferred_date=None, preferred_time=None, business_creator_id=None):
     conn = _conn()
     if not conn:

@@ -426,7 +426,14 @@ if estimate:
                             st.success("Payment request created.")
                             approve_url = payment_request.get("approve_url")
                             if approve_url:
+                                st.session_state[f"payment_approve_url_{rid}"] = approve_url
+                                # Make the sandbox approve URL easy to copy/open.
                                 st.markdown(f"[Approve payment in PayPal Sandbox]({approve_url})")
+                                st.text_input(
+                                    "PayPal Sandbox approve URL",
+                                    value=approve_url,
+                                    key=f"approve_url_input_{rid}",
+                                )
                             st.session_state[f"payment_order_id_{rid}"] = payment_request.get("order_id")
                         except PaymentError as ex:
                             st.error(str(ex))
