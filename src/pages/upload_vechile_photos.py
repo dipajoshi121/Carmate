@@ -158,7 +158,17 @@ if st.button("Upload Photos"):
 
             if response.status_code in (200, 201):
                 st.success("Photos uploaded successfully!")
-                st.json(response.json())
+                try:
+                    payload = response.json()
+                except Exception:
+                    payload = {}
+                uploaded_count = 0
+                if isinstance(payload, dict):
+                    photos = payload.get("photos")
+                    if isinstance(photos, list):
+                        uploaded_count = len(photos)
+                if uploaded_count > 0:
+                    st.caption(f"{uploaded_count} photo(s) uploaded.")
 
             elif response.status_code == 400:
                 st.error("Invalid request.")

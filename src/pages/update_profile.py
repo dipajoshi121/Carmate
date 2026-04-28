@@ -123,14 +123,16 @@ if submit_button:
                         "role": updated.get("role") or role,
                     }
                     st.success(" Profile updated successfully!")
-                    st.json({
-                        "id": st.session_state["user"]["id"],
-                        "fullName": st.session_state["user"]["fullName"],
-                        "email": st.session_state["user"]["email"],
-                        "phone": st.session_state["user"].get("phone", ""),
-                        "address": st.session_state["user"].get("address", ""),
-                        "isActive": st.session_state["user"].get("isActive", True),
-                    })
+                    name_line = (st.session_state["user"].get("fullName") or "").strip()
+                    address_line = (st.session_state["user"].get("address") or "").strip()
+                    if name_line and address_line:
+                        st.info(f"{name_line} | {address_line}")
+                    elif name_line:
+                        st.info(name_line)
+                    if st.session_state["user"].get("email"):
+                        st.caption(f"Email: {st.session_state['user'].get('email')}")
+                    if st.session_state["user"].get("phone"):
+                        st.caption(f"Phone: {st.session_state['user'].get('phone')}")
                 else:
                     st.error(" Could not update profile.")
             except Exception as e:
@@ -156,13 +158,17 @@ if submit_button:
                     if "user" in data:
                         st.session_state["user"] = data["user"]
                     st.success(" Profile updated successfully!")
-                    st.json({
-                        "id": data["user"]["id"],
-                        "fullName": data["user"]["fullName"],
-                        "email": data["user"]["email"],
-                        "phone": data["user"]["phone"],
-                        "isActive": data["user"]["isActive"]
-                    })
+                    out_user = data.get("user") or {}
+                    name_line = (out_user.get("fullName") or out_user.get("full_name") or "").strip()
+                    address_line = (out_user.get("address") or "").strip()
+                    if name_line and address_line:
+                        st.info(f"{name_line} | {address_line}")
+                    elif name_line:
+                        st.info(name_line)
+                    if out_user.get("email"):
+                        st.caption(f"Email: {out_user.get('email')}")
+                    if out_user.get("phone"):
+                        st.caption(f"Phone: {out_user.get('phone')}")
 
                 elif resp.status_code == 400:
                     backend_msg = resp.json().get("message", "Bad Request")
