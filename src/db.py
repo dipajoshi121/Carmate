@@ -1077,13 +1077,42 @@ def _ensure_request_chat_table(conn):
         )
 
 
-def list_request_chat_messages(request_id: str, limit: int = 200):
+def _get_request_chat_participants(conn, request_id: str):
+    with _cur(conn) as cur:
+        cur.execute(
+            """SELECT user_id, business_creator_id
+               FROM service_requests
+               WHERE id = %s
+               LIMIT 1""",
+            (str(request_id),),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None, None
+    return str(row.get("user_id") or ""), str(row.get("business_creator_id") or "")
+
+
+def _can_access_request_chat(owner_user_id: str, business_user_id: str, viewer_user_id, viewer_role: str | None) -> bool:
+    vuid = str(viewer_user_id or "")
+    vrole = (viewer_role or "").strip().lower()
+    # Private chat: only request owner customer or assigned business account.
+    if vrole == "user" and owner_user_id and vuid == owner_user_id:
+        return True
+    if vrole == "business" and business_user_id and vuid == business_user_id:
+        return True
+    return False
+
+
+def list_request_chat_messages(request_id: str, limit: int = 200, viewer_user_id=None, viewer_role: str | None = None):
     conn = _conn()
     if not conn:
         return []
     lim = max(1, min(int(limit or 200), 500))
     try:
         _ensure_request_chat_table(conn)
+        owner_uid, biz_uid = _get_request_chat_participants(conn, request_id)
+        if not _can_access_request_chat(owner_uid, biz_uid, viewer_user_id, viewer_role):
+            return []
         with _cur(conn) as cur:
             cur.execute(
                 """SELECT id, request_id, sender_user_id, sender_role, sender_name, message, created_at
@@ -1112,6 +1141,9 @@ def add_request_chat_message(request_id: str, sender_user_id, sender_role: str, 
         role = "user"
     try:
         _ensure_request_chat_table(conn)
+        owner_uid, biz_uid = _get_request_chat_participants(conn, request_id)
+        if not _can_access_request_chat(owner_uid, biz_uid, sender_user_id, role):
+            return None
         with _cur(conn) as cur:
             cur.execute(
                 """INSERT INTO request_chat_messages (request_id, sender_user_id, sender_role, sender_name, message)

@@ -450,7 +450,12 @@ if can_chat:
         try:
             from db import list_request_chat_messages, add_request_chat_message
 
-            msgs = list_request_chat_messages(rid, limit=200)
+            msgs = list_request_chat_messages(
+                rid,
+                limit=200,
+                viewer_user_id=user_id,
+                viewer_role=role,
+            )
             if msgs:
                 for m in msgs:
                     msg_role = (m.get("sender_role") or "user").strip().lower()
@@ -493,7 +498,7 @@ if can_chat:
                         st.success("Message sent.")
                         st.rerun()
                     else:
-                        st.error("Could not send message. Type a message and try again.")
+                        st.error("Could not send message. Only the request owner and assigned business can chat here.")
         except Exception as ex:
             st.caption("Chat requires database access: " + str(ex))
             log_bug("request details chat", traceback.format_exc())
