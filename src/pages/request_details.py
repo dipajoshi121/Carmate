@@ -285,223 +285,163 @@ if photos_list:
 else:
     st.caption("No vehicle photos uploaded yet.")
 
-estimate = (r.get("estimate") or {})
-if estimate:
-    st.subheader("Cost breakdown & estimate")
+estimate_rows = []
+if os.environ.get("DATABASE_URL"):
+    try:
+        from db import list_request_estimates
 
-    currency = estimate.get("currency", "USD")
-    labor = estimate.get("labor", 0)
-    parts = estimate.get("parts", 0)
-    tax = estimate.get("tax", 0)
-    fees = estimate.get("fees", 0)
-    total = estimate.get("total", None)
-    notes = estimate.get("notes", "")
-    valid_until = estimate.get("valid_until") or estimate.get("validUntil")
-    est_status = (estimate.get("status") or "submitted").lower()
+        estimate_rows = list_request_estimates(rid)
+    except Exception as ex:
+        st.caption("Could not load estimate list: " + str(ex))
 
-    if total is None:
+if estimate_rows:
+    st.subheader("Business estimates")
+    accepted_estimate = None
+    for est in estimate_rows:
+        est_id = str(est.get("id", ""))
+        est_status = (est.get("status") or "submitted").strip().lower()
+        if est_status == "accepted":
+            accepted_estimate = est
+        business_name = (est.get("business_name") or "").strip() or "Business"
+        if str(est.get("business_user_id") or "") == str(user_id):
+            business_name += " (you)"
+        with st.container(border=True):
+            st.markdown(f"**{business_name}** — *{est_status}*")
+            st.dataframe(
+                {
+                    "Line item": ["Labor", "Parts", "Tax", "Fees", "Total"],
+                    f"Amount ({(est.get('currency') or 'USD').upper()})": [
+                        est.get("labor") or 0,
+                        est.get("parts") or 0,
+                        est.get("tax") or 0,
+                        est.get("fees") or 0,
+                        est.get("total") or 0,
+                    ],
+                },
+                hide_index=True,
+                use_container_width=True,
+            )
+            if est.get("valid_until"):
+                st.caption(f"Valid until: {est.get('valid_until')}")
+            if est.get("notes"):
+                st.caption("Notes: " + str(est.get("notes")))
+            if is_customer_owner:
+                from db import set_request_estimate_status
+
+                a, b = st.columns(2)
+                with a:
+                    if st.button("Accept", key=f"accept_est_{est_id}"):
+                        if set_request_estimate_status(est_id, "accepted"):
+                            st.success("Estimate accepted.")
+                            st.rerun()
+                        else:
+                            st.error("Could not accept this estimate.")
+                with b:
+                    if st.button("Reject", key=f"reject_est_{est_id}"):
+                        if set_request_estimate_status(est_id, "rejected"):
+                            st.success("Estimate rejected.")
+                            st.rerun()
+                        else:
+                            st.error("Could not reject this estimate.")
+    if accepted_estimate and is_customer_owner:
+        st.subheader("Payment (PayPal Sandbox)")
+        currency = (accepted_estimate.get("currency") or "USD").upper()
+        payment_amount = accepted_estimate.get("total")
         try:
-            total = round(float(labor) + float(parts) + float(tax) + float(fees), 2)
+            payment_amount = round(float(payment_amount), 2)
         except Exception:
-            total = ""
+            payment_amount = None
+        if payment_amount is None or payment_amount <= 0:
+            st.error("Payment amount is invalid. Please ask the business to update estimate values.")
+        else:
+            latest_payment = None
+            if os.environ.get("DATABASE_URL"):
+                try:
+                    from db import get_latest_payment_for_request
+                    latest_payment = get_latest_payment_for_request(rid)
+                except Exception as ex:
+                    st.error("Database error while loading payment history: " + str(ex))
+            if latest_payment:
+                st.caption(
+                    f"Latest payment status: {latest_payment.get('status')} | "
+                    f"Order: {latest_payment.get('paypal_order_id') or '-'}"
+                )
+            if st.button("Create PayPal Payment Request", key=f"create_pay_{rid}"):
+                if not user_id:
+                    st.error("Missing user session. Please login again.")
+                else:
+                    try:
+                        payment_request = create_payment_request_api(
+                            request_id=rid,
+                            user_id=user_id,
+                            amount=payment_amount,
+                            currency=currency,
+                            description=f"Carmate request {rid}",
+                        )
+                        st.success("Payment request created.")
+                        approve_url = payment_request.get("approve_url")
+                        if approve_url:
+                            st.markdown(f"[Approve payment in PayPal Sandbox]({approve_url})")
+                        st.session_state[f"payment_order_id_{rid}"] = payment_request.get("order_id")
+                    except PaymentError as ex:
+                        st.error(str(ex))
+                        log_bug("Create payment request error", str(ex))
+                    except Exception as ex:
+                        st.error("Unexpected payment error: " + str(ex))
+                        log_bug("Create payment request exception", traceback.format_exc())
+            default_order_id = st.session_state.get(f"payment_order_id_{rid}", "")
+            if not default_order_id and latest_payment:
+                default_order_id = latest_payment.get("paypal_order_id") or ""
+            capture_order_id = st.text_input("PayPal Order ID to capture", value=default_order_id, key=f"capture_order_{rid}")
+            if st.button("Capture Payment", key=f"capture_pay_{rid}"):
+                if not capture_order_id.strip():
+                    st.error("Order ID is required.")
+                else:
+                    try:
+                        capture = capture_paypal_order(capture_order_id.strip())
+                        from db import update_payment_transaction_by_order
 
-    with st.container(border=True):
-        try:
-            tnum = float(total) if total is not None and total != "" else 0.0
-        except Exception:
-            tnum = 0.0
+                        update_payment_transaction_by_order(
+                            paypal_order_id=capture_order_id.strip(),
+                            status=(capture.get("status") or "completed").lower(),
+                            paypal_capture_id=capture.get("capture_id"),
+                            raw_response=capture.get("raw"),
+                        )
+                        st.success("Payment captured successfully.")
+                    except PaymentError as ex:
+                        st.error(str(ex))
+                        log_bug("Capture payment error", str(ex))
+                    except Exception as ex:
+                        st.error("Unexpected payment capture error: " + str(ex))
+                        log_bug("Capture payment exception", traceback.format_exc())
+    elif accepted_estimate and not is_customer_owner:
+        st.caption("A customer has accepted one of the estimates.")
+else:
+    estimate = (r.get("estimate") or {})
+    if estimate:
+        st.subheader("Cost breakdown & estimate")
+        st.caption("Legacy single-estimate view (API mode).")
+        currency = estimate.get("currency", "USD")
+        labor = estimate.get("labor", 0)
+        parts = estimate.get("parts", 0)
+        tax = estimate.get("tax", 0)
+        fees = estimate.get("fees", 0)
+        total = estimate.get("total", None)
+        if total is None:
+            try:
+                total = round(float(labor) + float(parts) + float(tax) + float(fees), 2)
+            except Exception:
+                total = ""
         st.dataframe(
             {
                 "Line item": ["Labor", "Parts", "Tax", "Fees", "Total"],
-                f"Amount ({currency})": [
-                    labor,
-                    parts,
-                    tax,
-                    fees,
-                    round(tnum, 2),
-                ],
+                f"Amount ({currency})": [labor, parts, tax, fees, total],
             },
             hide_index=True,
             use_container_width=True,
         )
-
-        if valid_until:
-            st.caption(f"Valid until: {valid_until}")
-        if notes:
-            st.caption(f"Notes: {notes}")
-
-        st.caption(f"Estimate status: {est_status}")
-
-        if est_status in ("submitted", "pending", "quoted") and is_customer_owner:
-            colA, colB = st.columns(2)
-            with colA:
-                if st.button("Accept Estimate", key=f"accept_est_{rid}"):
-                    done = False
-                    if os.environ.get("DATABASE_URL"):
-                        try:
-                            from db import update_estimate_status
-                            if update_estimate_status(rid, "accepted"):
-                                st.success("Estimate accepted.")
-                                st.rerun()
-                            else:
-                                st.error("Could not accept estimate.")
-                            done = True
-                        except Exception as ex:
-                            st.error("Database error: " + str(ex))
-                            done = True
-                    if not done:
-                        try:
-                            resp = requests.patch(
-                                UPDATE_ESTIMATE_STATUS_URL.format(rid),
-                                json={"status": "accepted"},
-                                headers={**auth_headers(), "Content-Type": "application/json"},
-                                timeout=20,
-                            )
-                            if resp.status_code in (200, 201):
-                                st.success("Estimate accepted.")
-                                st.rerun()
-                            else:
-                                st.error(f"Could not accept estimate ({resp.status_code})")
-                                log_bug("Accept estimate error", resp.text)
-                        except Exception as ex:
-                            st.error("Error contacting server.")
-                            log_bug("Accept estimate exception", str(ex))
-            with colB:
-                if st.button("Reject Estimate", key=f"reject_est_{rid}"):
-                    done = False
-                    if os.environ.get("DATABASE_URL"):
-                        try:
-                            from db import update_estimate_status
-                            if update_estimate_status(rid, "rejected"):
-                                st.success("Estimate rejected.")
-                                st.rerun()
-                            else:
-                                st.error("Could not reject estimate.")
-                            done = True
-                        except Exception as ex:
-                            st.error("Database error: " + str(ex))
-                            done = True
-                    if not done:
-                        try:
-                            resp = requests.patch(
-                                UPDATE_ESTIMATE_STATUS_URL.format(rid),
-                                json={"status": "rejected"},
-                                headers={**auth_headers(), "Content-Type": "application/json"},
-                                timeout=20,
-                            )
-                            if resp.status_code in (200, 201):
-                                st.success("Estimate rejected.")
-                                st.rerun()
-                            else:
-                                st.error(f"Could not reject estimate ({resp.status_code})")
-                                log_bug("Reject estimate error", resp.text)
-                        except Exception as ex:
-                            st.error("Error contacting server.")
-                            log_bug("Reject estimate exception", str(ex))
-        elif est_status in ("submitted", "pending", "quoted") and not is_customer_owner:
-            st.info("Only the **customer** who owns this request can accept or reject an estimate.")
-        elif est_status == "accepted" and is_customer_owner:
-            st.subheader("Payment (PayPal Sandbox)")
-            payment_amount = total
-            try:
-                payment_amount = round(float(payment_amount), 2)
-            except Exception:
-                payment_amount = None
-
-            if payment_amount is None or payment_amount <= 0:
-                st.error("Payment amount is invalid. Please update the estimate total.")
-            else:
-                latest_payment = None
-                if os.environ.get("DATABASE_URL"):
-                    try:
-                        from db import get_latest_payment_for_request
-                        latest_payment = get_latest_payment_for_request(rid)
-                    except Exception as ex:
-                        st.error("Database error while loading payment history: " + str(ex))
-
-                if latest_payment:
-                    st.caption(
-                        f"Latest payment status: {latest_payment.get('status')} | "
-                        f"Order: {latest_payment.get('paypal_order_id') or '-'}"
-                    )
-                    if latest_payment.get("failure_reason"):
-                        st.caption("Failure reason: " + str(latest_payment.get("failure_reason")))
-
-                if st.button("Create PayPal Payment Request", key=f"create_pay_{rid}"):
-                    if not os.environ.get("DATABASE_URL"):
-                        st.error("DATABASE_URL is required so transactions can be stored.")
-                    elif not user_id:
-                        st.error("Missing user session. Please login again.")
-                    else:
-                        try:
-                            payment_request = create_payment_request_api(
-                                request_id=rid,
-                                user_id=user_id,
-                                amount=payment_amount,
-                                currency=currency,
-                                description=f"Carmate request {rid}",
-                            )
-                            st.success("Payment request created.")
-                            approve_url = payment_request.get("approve_url")
-                            if approve_url:
-                                st.session_state[f"payment_approve_url_{rid}"] = approve_url
-                                # Make the sandbox approve URL easy to copy/open.
-                                st.markdown(f"[Approve payment in PayPal Sandbox]({approve_url})")
-                                st.text_input(
-                                    "PayPal Sandbox approve URL",
-                                    value=approve_url,
-                                    key=f"approve_url_input_{rid}",
-                                )
-                            st.session_state[f"payment_order_id_{rid}"] = payment_request.get("order_id")
-                        except PaymentError as ex:
-                            st.error(str(ex))
-                            log_bug("Create payment request error", str(ex))
-                        except Exception as ex:
-                            st.error("Unexpected payment error: " + str(ex))
-                            log_bug("Create payment request exception", traceback.format_exc())
-
-                default_order_id = st.session_state.get(f"payment_order_id_{rid}", "")
-                if not default_order_id and latest_payment:
-                    default_order_id = latest_payment.get("paypal_order_id") or ""
-                capture_order_id = st.text_input("PayPal Order ID to capture", value=default_order_id, key=f"capture_order_{rid}")
-
-                if st.button("Capture Payment", key=f"capture_pay_{rid}"):
-                    if not capture_order_id.strip():
-                        st.error("Order ID is required.")
-                    elif not os.environ.get("DATABASE_URL"):
-                        st.error("DATABASE_URL is required so transactions can be stored.")
-                    else:
-                        try:
-                            capture = capture_paypal_order(capture_order_id.strip())
-                            from db import update_payment_transaction_by_order
-                            update_payment_transaction_by_order(
-                                paypal_order_id=capture_order_id.strip(),
-                                status=(capture.get("status") or "completed").lower(),
-                                paypal_capture_id=capture.get("capture_id"),
-                                raw_response=capture.get("raw"),
-                            )
-                            st.success("Payment captured successfully.")
-                        except PaymentError as ex:
-                            try:
-                                from db import update_payment_transaction_by_order
-                                update_payment_transaction_by_order(
-                                    paypal_order_id=capture_order_id.strip(),
-                                    status="failed",
-                                    failure_reason=str(ex),
-                                )
-                            except Exception:
-                                pass
-                            st.error(str(ex))
-                            log_bug("Capture payment error", str(ex))
-                        except Exception as ex:
-                            st.error("Unexpected payment capture error: " + str(ex))
-                            log_bug("Capture payment exception", traceback.format_exc())
-        elif est_status == "accepted" and not is_customer_owner:
-            st.caption("Estimate accepted. Payment is completed on the vehicle owner's account.")
-        else:
-            st.info("This estimate is already finalized.")
-else:
-    st.info("No estimate has been submitted yet.")
+    else:
+        st.info("No estimate has been submitted yet.")
 
 if can_chat:
     st.subheader("Customer <-> Business chat")

@@ -31,7 +31,7 @@ if not os.environ.get("DATABASE_URL"):
     st.stop()
 
 try:
-    from db import list_all_service_requests, DatabaseError
+    from db import list_all_service_requests, list_request_estimates, DatabaseError
 
     with st.spinner("Loading requests..."):
         all_req = list_all_service_requests()
@@ -52,8 +52,38 @@ def _estimate_status(r: dict) -> str:
     return (est.get("status") or "").strip().lower()
 
 
+accepted_request_ids = set()
+accepted_for_me = []
+for _r in all_req:
+    rid_val = str(_r.get("id", ""))
+    if not rid_val:
+        continue
+    try:
+        est_rows = list_request_estimates(rid_val)
+        if any((e.get("status") or "").strip().lower() == "accepted" for e in est_rows):
+            accepted_request_ids.add(rid_val)
+        mine_here = [
+            e
+            for e in est_rows
+            if str(e.get("business_user_id") or "") == str(uid)
+        ]
+        accepted_mine = next(
+            (e for e in mine_here if (e.get("status") or "").strip().lower() == "accepted"),
+            None,
+        )
+        if accepted_mine:
+            accepted_for_me.append({
+                "request": _r,
+                "estimate": accepted_mine,
+            })
+    except Exception:
+        # Keep dashboard resilient; fallback to legacy estimate JSON below.
+        pass
+
+
 def _customer_accepted_estimate(r: dict) -> bool:
-    return _estimate_status(r) == "accepted"
+    rid_val = str(r.get("id", ""))
+    return rid_val in accepted_request_ids or _estimate_status(r) == "accepted"
 
 
 def _job_completed(r: dict) -> bool:
@@ -65,7 +95,7 @@ accepted_reqs = [r for r in all_req if _customer_accepted_estimate(r)]
 completed_reqs = [r for r in all_req if _job_completed(r)]
 other_reqs = [r for r in all_req if not _customer_accepted_estimate(r)]
 
-mx1, mx2, mx3, mx4 = st.columns(4)
+mx1, mx2, mx3, mx4, mx5 = st.columns(5)
 with mx1:
     st.metric("Requests your business logged", len(mine))
 with mx2:
@@ -74,6 +104,8 @@ with mx3:
     st.metric("Estimates accepted by customers", len(accepted_reqs))
 with mx4:
     st.metric("Completed jobs", len(completed_reqs))
+with mx5:
+    st.metric("Your accepted quotes", len(accepted_for_me))
 
 try:
     from db import business_rating_summary
@@ -86,16 +118,37 @@ try:
 except Exception:
     pass
 
-c1, c2, c3 = st.columns(3)
+c1, c2 = st.columns(2)
 with c1:
-    if st.button("Create request", use_container_width=True):
-        st.switch_page("pages/service_request.py")
-with c2:
     if st.button("Submit estimate", use_container_width=True):
         st.switch_page("pages/submit_estimate.py")
-with c3:
+with c2:
     if st.button("Upload photos", use_container_width=True):
         st.switch_page("pages/upload_vechile_photos.py")
+
+st.divider()
+
+st.subheader("Accepted quotations for your business")
+if not accepted_for_me:
+    st.caption("No customer has accepted your quote yet.")
+else:
+    st.success(f"You have {len(accepted_for_me)} accepted quote(s).")
+    for item in accepted_for_me:
+        req = item["request"]
+        est = item["estimate"]
+        rid = str(req.get("id", ""))
+        vehicle = req.get("vehicle") or {}
+        title = f"{vehicle.get('year', '')} {vehicle.get('make', '')} {vehicle.get('model', '')}".strip()
+        quote_total = est.get("total")
+        quote_ccy = (est.get("currency") or "USD").upper()
+        with st.container(border=True):
+            st.markdown("**Customer accepted your quotation**")
+            if title:
+                st.write(title)
+            st.caption(f"Accepted price: {quote_ccy} {quote_total}")
+            if st.button("Open accepted request", key=f"biz_open_acc_me_{rid}"):
+                st.session_state["selected_request_id"] = rid
+                st.switch_page("pages/request_details.py")
 
 st.divider()
 

@@ -74,16 +74,28 @@ if submitted:
 
         if os.environ.get("DATABASE_URL"):
             try:
-                from db import update_request_estimate
+                from db import upsert_request_estimate
+                biz_uid = st.session_state.get("user", {}).get("id") or st.session_state.get("token")
+                biz_name = (
+                    st.session_state.get("user", {}).get("fullName")
+                    or st.session_state.get("user", {}).get("full_name")
+                    or st.session_state.get("user", {}).get("email")
+                    or "Business"
+                )
                 with st.spinner("Submitting estimate..."):
-                    result = update_request_estimate(req_id_clean, estimate_payload)
+                    result = upsert_request_estimate(
+                        request_id=req_id_clean,
+                        business_user_id=str(biz_uid),
+                        business_name=str(biz_name),
+                        estimate=estimate_payload,
+                    )
                 if result:
                     used_db = True
                     st.success("Estimate submitted successfully!")
-                    st.caption("The customer can review this estimate from their request details.")
+                    st.caption("The customer can now compare this estimate with other business quotes.")
                 else:
                     st.error("Request not found or could not update estimate.")
-                    log_bug("Submit estimate DB", "update_request_estimate returned None")
+                    log_bug("Submit estimate DB", "upsert_request_estimate returned None")
             except Exception as e:
                 st.error("Database error: " + str(e))
                 log_bug("Submit estimate DB error", traceback.format_exc())

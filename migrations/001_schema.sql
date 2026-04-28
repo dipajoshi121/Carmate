@@ -95,3 +95,24 @@ CREATE TABLE IF NOT EXISTS request_chat_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_request_chat_messages_req_created ON request_chat_messages(request_id, created_at);
+
+CREATE TABLE IF NOT EXISTS request_estimates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id UUID NOT NULL REFERENCES service_requests(id) ON DELETE CASCADE,
+  business_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  business_name TEXT,
+  currency TEXT NOT NULL DEFAULT 'USD',
+  labor NUMERIC(12,2) NOT NULL DEFAULT 0,
+  parts NUMERIC(12,2) NOT NULL DEFAULT 0,
+  tax NUMERIC(12,2) NOT NULL DEFAULT 0,
+  fees NUMERIC(12,2) NOT NULL DEFAULT 0,
+  total NUMERIC(12,2) NOT NULL DEFAULT 0,
+  notes TEXT,
+  valid_until DATE,
+  status TEXT NOT NULL DEFAULT 'submitted',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (request_id, business_user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_request_estimates_request_id ON request_estimates(request_id);
+CREATE INDEX IF NOT EXISTS idx_request_estimates_business_user_id ON request_estimates(business_user_id);

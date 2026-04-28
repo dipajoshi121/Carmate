@@ -383,6 +383,171 @@ def update_estimate_status(request_id, status: str):
     finally:
         conn.close()
 
+
+def _ensure_request_estimates_table(conn):
+    with _cur(conn, dict_cursor=False) as cur:
+        cur.execute(
+            """CREATE TABLE IF NOT EXISTS request_estimates (
+                   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                   request_id UUID NOT NULL REFERENCES service_requests(id) ON DELETE CASCADE,
+                   business_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                   business_name TEXT,
+                   currency TEXT NOT NULL DEFAULT 'USD',
+                   labor NUMERIC(12,2) NOT NULL DEFAULT 0,
+                   parts NUMERIC(12,2) NOT NULL DEFAULT 0,
+                   tax NUMERIC(12,2) NOT NULL DEFAULT 0,
+                   fees NUMERIC(12,2) NOT NULL DEFAULT 0,
+                   total NUMERIC(12,2) NOT NULL DEFAULT 0,
+                   notes TEXT,
+                   valid_until DATE,
+                   status TEXT NOT NULL DEFAULT 'submitted',
+                   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                   updated_at TIMESTAMPTZ DEFAULT now(),
+                   UNIQUE (request_id, business_user_id)
+               )"""
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_request_estimates_request_id ON request_estimates(request_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_request_estimates_business_user_id ON request_estimates(business_user_id)"
+        )
+
+
+def upsert_request_estimate(
+    request_id: str,
+    business_user_id: str,
+    business_name: str | None,
+    estimate: dict,
+):
+    conn = _conn()
+    if not conn:
+        return None
+    try:
+        _ensure_request_estimates_table(conn)
+        with _cur(conn) as cur:
+            cur.execute(
+                """INSERT INTO request_estimates (
+                       request_id, business_user_id, business_name, currency, labor, parts, tax, fees, total, notes, valid_until, status
+                   )
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (request_id, business_user_id)
+                   DO UPDATE SET
+                       business_name = EXCLUDED.business_name,
+                       currency = EXCLUDED.currency,
+                       labor = EXCLUDED.labor,
+                       parts = EXCLUDED.parts,
+                       tax = EXCLUDED.tax,
+                       fees = EXCLUDED.fees,
+                       total = EXCLUDED.total,
+                       notes = EXCLUDED.notes,
+                       valid_until = EXCLUDED.valid_until,
+                       status = EXCLUDED.status,
+                       updated_at = now()
+                   RETURNING id, request_id, business_user_id, business_name, currency, labor, parts, tax, fees, total, notes, valid_until, status, created_at, updated_at""",
+                (
+                    str(request_id),
+                    str(business_user_id),
+                    (business_name or "").strip() or None,
+                    (estimate.get("currency") or "USD").upper(),
+                    estimate.get("labor") or 0,
+                    estimate.get("parts") or 0,
+                    estimate.get("tax") or 0,
+                    estimate.get("fees") or 0,
+                    estimate.get("total") or 0,
+                    (estimate.get("notes") or "").strip() or None,
+                    estimate.get("valid_until"),
+                    (estimate.get("status") or "submitted").strip().lower(),
+                ),
+            )
+            row = cur.fetchone()
+            cur.execute(
+                "UPDATE service_requests SET status = 'Quoted', updated_at = now() WHERE id = %s AND status IN ('Pending', 'Quoted')",
+                (str(request_id),),
+            )
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+
+def list_request_estimates(request_id: str):
+    conn = _conn()
+    if not conn:
+        return []
+    try:
+        _ensure_request_estimates_table(conn)
+        with _cur(conn) as cur:
+            cur.execute(
+                """SELECT id, request_id, business_user_id, business_name, currency, labor, parts, tax, fees, total,
+                          notes, valid_until, status, created_at, updated_at
+                   FROM request_estimates
+                   WHERE request_id = %s
+                   ORDER BY created_at ASC""",
+                (str(request_id),),
+            )
+            return [dict(r) for r in cur.fetchall()]
+    except Exception as e:
+        raise DatabaseError(str(e)) from e
+    finally:
+        conn.close()
+
+
+def set_request_estimate_status(estimate_id: str, status: str):
+    conn = _conn()
+    if not conn:
+        return None
+    new_status = (status or "").strip().lower()
+    if new_status not in ("submitted", "accepted", "rejected"):
+        return None
+    try:
+        _ensure_request_estimates_table(conn)
+        with _cur(conn) as cur:
+            cur.execute(
+                """SELECT request_id FROM request_estimates WHERE id = %s LIMIT 1""",
+                (str(estimate_id),),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            req_id = str(row.get("request_id"))
+            if new_status == "accepted":
+                cur.execute(
+                    """UPDATE request_estimates
+                       SET status = CASE WHEN id = %s THEN 'accepted' ELSE status END,
+                           updated_at = now()
+                       WHERE request_id = %s""",
+                    (str(estimate_id), req_id),
+                )
+                cur.execute(
+                    """UPDATE request_estimates
+                       SET status = 'submitted', updated_at = now()
+                       WHERE request_id = %s AND id <> %s AND status = 'accepted'""",
+                    (req_id, str(estimate_id)),
+                )
+            else:
+                cur.execute(
+                    "UPDATE request_estimates SET status = %s, updated_at = now() WHERE id = %s",
+                    (new_status, str(estimate_id)),
+                )
+            cur.execute(
+                """SELECT id, request_id, business_user_id, business_name, currency, labor, parts, tax, fees, total,
+                          notes, valid_until, status, created_at, updated_at
+                   FROM request_estimates WHERE id = %s LIMIT 1""",
+                (str(estimate_id),),
+            )
+            out = cur.fetchone()
+        conn.commit()
+        return dict(out) if out else None
+    except Exception:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
 def list_all_service_requests():
     conn = _conn()
     if not conn:
