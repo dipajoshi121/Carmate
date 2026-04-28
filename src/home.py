@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import streamlit as st
@@ -18,6 +19,30 @@ if bg:
 token = st.session_state.get("token")
 qrole = get_session_role() if token else None
 
+
+def _render_public_ratings_preview():
+    st.subheader("Public business ratings")
+    if not os.environ.get("DATABASE_URL"):
+        st.caption("Ratings become visible when DATABASE_URL is configured.")
+    else:
+        try:
+            from db import list_businesses_with_ratings
+
+            rated = [r for r in list_businesses_with_ratings() if int(r.get("review_count") or 0) > 0]
+        except Exception:
+            rated = []
+        if not rated:
+            st.caption("No public ratings yet.")
+        else:
+            for row in rated[:5]:
+                name = (row.get("full_name") or "").strip() or (row.get("email") or "Business")
+                avg = float(row.get("avg_rating") or 0)
+                cnt = int(row.get("review_count") or 0)
+                stars = min(5, max(1, int(round(avg))))
+                st.markdown(f"**{name}** — " + ("★" * stars + "☆" * (5 - stars)) + f" ({avg:.2f}/5, {cnt} review(s))")
+    if st.button("View all public ratings", use_container_width=True, key="home_public_ratings"):
+        st.switch_page("pages/view_ratings.py")
+
 # Logged-in business: shop-only home (no customer marketing, sign-up, or consumer flows).
 if token and qrole == ROLE_BUSINESS:
     st.title("Business portfolio")
@@ -36,11 +61,17 @@ if token and qrole == ROLE_USER:
     st.title("Carmate")
     st.write("Welcome back. Track your service requests or create a new one.")
     st.divider()
-    if st.button("My requests", use_container_width=True):
-        st.switch_page("pages/my_request.py")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("My requests", use_container_width=True):
+            st.switch_page("pages/my_request.py")
+    with c2:
+        if st.button("View business ratings", use_container_width=True):
+            st.switch_page("pages/view_ratings.py")
     if st.button("Log out", use_container_width=True):
         perform_logout()
         st.switch_page("home.py")
+    _render_public_ratings_preview()
     st.caption("Use the top menu for more actions.")
     st.stop()
 
@@ -100,3 +131,6 @@ with r2:
     if st.button("Register as business", use_container_width=True):
         st.session_state["register_intent"] = "business"
         st.switch_page("pages/register.py")
+
+st.divider()
+_render_public_ratings_preview()
