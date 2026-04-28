@@ -31,7 +31,7 @@ if not os.environ.get("DATABASE_URL"):
     st.stop()
 
 try:
-    from db import list_all_service_requests, list_request_estimates, DatabaseError
+    from db import list_all_service_requests, list_request_estimates, update_service_request_fields, DatabaseError
 
     with st.spinner("Loading requests..."):
         all_req = list_all_service_requests()
@@ -146,9 +146,36 @@ else:
             if title:
                 st.write(title)
             st.caption(f"Accepted price: {quote_ccy} {quote_total}")
-            if st.button("Open accepted request", key=f"biz_open_acc_me_{rid}"):
-                st.session_state["selected_request_id"] = rid
-                st.switch_page("pages/request_details.py")
+            b1, b2 = st.columns(2)
+            with b1:
+                if st.button("Open accepted request", key=f"biz_open_acc_me_{rid}", use_container_width=True):
+                    st.session_state["selected_request_id"] = rid
+                    st.switch_page("pages/request_details.py")
+            with b2:
+                already_completed = (req.get("status") or "").strip().lower() == "completed"
+                if already_completed:
+                    st.button(
+                        "Completed",
+                        key=f"biz_done_acc_me_{rid}",
+                        disabled=True,
+                        use_container_width=True,
+                    )
+                else:
+                    if st.button(
+                        "Mark completed",
+                        key=f"biz_mark_done_acc_me_{rid}",
+                        use_container_width=True,
+                    ):
+                        try:
+                            out = update_service_request_fields(rid, status="Completed")
+                            if out:
+                                st.success("Job marked as completed.")
+                                st.rerun()
+                            else:
+                                st.error("Could not mark this request as completed.")
+                        except Exception as ex:
+                            st.error("Database error: " + str(ex))
+                            log_bug("business dashboard mark completed", str(ex))
 
 st.divider()
 

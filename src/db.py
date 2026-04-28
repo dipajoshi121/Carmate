@@ -1078,6 +1078,9 @@ def _ensure_request_chat_table(conn):
                    sender_user_id TEXT,
                    sender_role TEXT NOT NULL,
                    counterparty_business_user_id TEXT,
+                   receiver_user_id TEXT,
+                   is_read BOOLEAN NOT NULL DEFAULT FALSE,
+                   read_at TIMESTAMPTZ,
                    sender_name TEXT,
                    message TEXT NOT NULL,
                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -1087,10 +1090,22 @@ def _ensure_request_chat_table(conn):
             "ALTER TABLE request_chat_messages ADD COLUMN IF NOT EXISTS counterparty_business_user_id TEXT"
         )
         cur.execute(
+            "ALTER TABLE request_chat_messages ADD COLUMN IF NOT EXISTS receiver_user_id TEXT"
+        )
+        cur.execute(
+            "ALTER TABLE request_chat_messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+        cur.execute(
+            "ALTER TABLE request_chat_messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ"
+        )
+        cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_request_chat_messages_req_created ON request_chat_messages(request_id, created_at)"
         )
         cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_request_chat_messages_req_biz_created ON request_chat_messages(request_id, counterparty_business_user_id, created_at)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_request_chat_messages_receiver_unread ON request_chat_messages(receiver_user_id, is_read)"
         )
 
 
@@ -1109,10 +1124,8 @@ def _get_request_chat_participants(conn, request_id: str):
     return str(row.get("user_id") or ""), str(row.get("business_creator_id") or "")
 
 
-def _list_request_business_participants(conn, request_id: str, fallback_business_user_id: str):
+def _list_request_business_participants(conn, request_id: str):
     out = set()
-    if fallback_business_user_id:
-        out.add(str(fallback_business_user_id))
     try:
         with _cur(conn) as cur:
             cur.execute(
@@ -1160,8 +1173,8 @@ def list_request_chat_messages(
     lim = max(1, min(int(limit or 200), 500))
     try:
         _ensure_request_chat_table(conn)
-        owner_uid, fallback_biz_uid = _get_request_chat_participants(conn, request_id)
-        biz_participants = _list_request_business_participants(conn, request_id, fallback_biz_uid)
+        owner_uid, _ = _get_request_chat_participants(conn, request_id)
+        biz_participants = _list_request_business_participants(conn, request_id)
         if not _can_access_request_chat(owner_uid, biz_participants, viewer_user_id, viewer_role):
             return []
         vuid = str(viewer_user_id or "")
@@ -1176,7 +1189,8 @@ def list_request_chat_messages(
             return []
         with _cur(conn) as cur:
             cur.execute(
-                """SELECT id, request_id, sender_user_id, sender_role, counterparty_business_user_id, sender_name, message, created_at
+                """SELECT id, request_id, sender_user_id, sender_role, counterparty_business_user_id, receiver_user_id,
+                          is_read, read_at, sender_name, message, created_at
                    FROM request_chat_messages
                    WHERE request_id = %s AND counterparty_business_user_id = %s
                    ORDER BY created_at ASC
@@ -1209,8 +1223,8 @@ def add_request_chat_message(
         role = "user"
     try:
         _ensure_request_chat_table(conn)
-        owner_uid, fallback_biz_uid = _get_request_chat_participants(conn, request_id)
-        biz_participants = _list_request_business_participants(conn, request_id, fallback_biz_uid)
+        owner_uid, _ = _get_request_chat_participants(conn, request_id)
+        biz_participants = _list_request_business_participants(conn, request_id)
         if not _can_access_request_chat(owner_uid, biz_participants, sender_user_id, role):
             return None
         sender_uid = str(sender_user_id or "")
@@ -1222,16 +1236,24 @@ def add_request_chat_message(
                 return None
         else:
             return None
+        receiver_uid = owner_uid if role == "business" else thread_biz_uid
+        if not receiver_uid:
+            return None
         with _cur(conn) as cur:
             cur.execute(
-                """INSERT INTO request_chat_messages (request_id, sender_user_id, sender_role, counterparty_business_user_id, sender_name, message)
-                   VALUES (%s, %s, %s, %s, %s, %s)
-                   RETURNING id, request_id, sender_user_id, sender_role, counterparty_business_user_id, sender_name, message, created_at""",
+                """INSERT INTO request_chat_messages (
+                       request_id, sender_user_id, sender_role, counterparty_business_user_id,
+                       receiver_user_id, is_read, read_at, sender_name, message
+                   )
+                   VALUES (%s, %s, %s, %s, %s, FALSE, NULL, %s, %s)
+                   RETURNING id, request_id, sender_user_id, sender_role, counterparty_business_user_id,
+                             receiver_user_id, is_read, read_at, sender_name, message, created_at""",
                 (
                     str(request_id),
                     sender_uid if sender_uid else None,
                     role,
                     thread_biz_uid,
+                    receiver_uid,
                     (sender_name or "").strip() or None,
                     text,
                 ),
@@ -1242,5 +1264,139 @@ def add_request_chat_message(
     except Exception:
         conn.rollback()
         return None
+    finally:
+        conn.close()
+
+
+def list_user_chat_conversations(viewer_user_id, viewer_role: str | None, limit: int = 200):
+    conn = _conn()
+    if not conn:
+        return []
+    vuid = str(viewer_user_id or "")
+    vrole = (viewer_role or "").strip().lower()
+    lim = max(1, min(int(limit or 200), 500))
+    if not vuid or vrole not in ("user", "business"):
+        return []
+    try:
+        _ensure_request_chat_table(conn)
+        with _cur(conn) as cur:
+            if vrole == "user":
+                cur.execute(
+                    """WITH allowed_threads AS (
+                           SELECT re.request_id, re.business_user_id::text AS business_user_id, COALESCE(re.business_name, 'Business') AS business_name
+                           FROM request_estimates re
+                           JOIN service_requests sr ON sr.id = re.request_id
+                           WHERE sr.user_id = %s
+                           GROUP BY re.request_id, re.business_user_id::text, COALESCE(re.business_name, 'Business')
+                       ),
+                       latest_message AS (
+                           SELECT DISTINCT ON (m.request_id, m.counterparty_business_user_id)
+                                  m.request_id, m.counterparty_business_user_id, m.message, m.created_at,
+                                  m.sender_user_id, m.sender_role
+                           FROM request_chat_messages m
+                           ORDER BY m.request_id, m.counterparty_business_user_id, m.created_at DESC
+                       ),
+                       unread_by_thread AS (
+                           SELECT m.request_id, m.counterparty_business_user_id, COUNT(*)::int AS unread_count
+                           FROM request_chat_messages m
+                           WHERE m.receiver_user_id = %s AND COALESCE(m.is_read, FALSE) = FALSE
+                           GROUP BY m.request_id, m.counterparty_business_user_id
+                       )
+                       SELECT at.request_id, at.business_user_id AS counterparty_business_user_id, at.business_name,
+                              lm.message AS latest_message, lm.created_at AS latest_message_at,
+                              COALESCE(ubt.unread_count, 0) AS unread_count
+                       FROM allowed_threads at
+                       LEFT JOIN latest_message lm
+                         ON lm.request_id = at.request_id AND lm.counterparty_business_user_id = at.business_user_id
+                       LEFT JOIN unread_by_thread ubt
+                         ON ubt.request_id = at.request_id AND ubt.counterparty_business_user_id = at.business_user_id
+                       ORDER BY COALESCE(lm.created_at, now() - interval '100 years') DESC
+                       LIMIT %s""",
+                    (vuid, vuid, lim),
+                )
+            else:
+                cur.execute(
+                    """WITH allowed_threads AS (
+                           SELECT re.request_id, re.business_user_id::text AS business_user_id
+                           FROM request_estimates re
+                           WHERE re.business_user_id = %s
+                           GROUP BY re.request_id, re.business_user_id::text
+                       ),
+                       latest_message AS (
+                           SELECT DISTINCT ON (m.request_id, m.counterparty_business_user_id)
+                                  m.request_id, m.counterparty_business_user_id, m.message, m.created_at,
+                                  m.sender_user_id, m.sender_role
+                           FROM request_chat_messages m
+                           ORDER BY m.request_id, m.counterparty_business_user_id, m.created_at DESC
+                       ),
+                       unread_by_thread AS (
+                           SELECT m.request_id, m.counterparty_business_user_id, COUNT(*)::int AS unread_count
+                           FROM request_chat_messages m
+                           WHERE m.receiver_user_id = %s AND COALESCE(m.is_read, FALSE) = FALSE
+                           GROUP BY m.request_id, m.counterparty_business_user_id
+                       )
+                       SELECT at.request_id, at.business_user_id AS counterparty_business_user_id,
+                              COALESCE(u.full_name, u.email, 'Customer') AS customer_name,
+                              lm.message AS latest_message, lm.created_at AS latest_message_at,
+                              COALESCE(ubt.unread_count, 0) AS unread_count
+                       FROM allowed_threads at
+                       JOIN service_requests sr ON sr.id = at.request_id
+                       LEFT JOIN users u ON u.id = sr.user_id
+                       LEFT JOIN latest_message lm
+                         ON lm.request_id = at.request_id AND lm.counterparty_business_user_id = at.business_user_id
+                       LEFT JOIN unread_by_thread ubt
+                         ON ubt.request_id = at.request_id AND ubt.counterparty_business_user_id = at.business_user_id
+                       ORDER BY COALESCE(lm.created_at, now() - interval '100 years') DESC
+                       LIMIT %s""",
+                    (vuid, vuid, lim),
+                )
+            rows = cur.fetchall()
+            return [dict(r) for r in rows]
+    except Exception as e:
+        raise DatabaseError(str(e)) from e
+    finally:
+        conn.close()
+
+
+def mark_request_chat_thread_read(
+    request_id: str,
+    counterparty_business_user_id: str,
+    viewer_user_id,
+    viewer_role: str | None,
+):
+    conn = _conn()
+    if not conn:
+        return 0
+    vuid = str(viewer_user_id or "")
+    vrole = (viewer_role or "").strip().lower()
+    thread_biz_uid = str(counterparty_business_user_id or "").strip()
+    if not vuid or vrole not in ("user", "business") or not thread_biz_uid:
+        return 0
+    try:
+        _ensure_request_chat_table(conn)
+        owner_uid, _ = _get_request_chat_participants(conn, request_id)
+        biz_participants = _list_request_business_participants(conn, request_id)
+        if not _can_access_request_chat(owner_uid, biz_participants, viewer_user_id, viewer_role):
+            return 0
+        if vrole == "user" and thread_biz_uid not in biz_participants:
+            return 0
+        if vrole == "business" and vuid != thread_biz_uid:
+            return 0
+        with _cur(conn) as cur:
+            cur.execute(
+                """UPDATE request_chat_messages
+                   SET is_read = TRUE, read_at = now()
+                   WHERE request_id = %s
+                     AND counterparty_business_user_id = %s
+                     AND receiver_user_id = %s
+                     AND COALESCE(is_read, FALSE) = FALSE""",
+                (str(request_id), thread_biz_uid, vuid),
+            )
+            updated = cur.rowcount or 0
+        conn.commit()
+        return int(updated)
+    except Exception:
+        conn.rollback()
+        return 0
     finally:
         conn.close()

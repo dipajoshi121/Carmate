@@ -148,6 +148,7 @@ if role == ROLE_BUSINESS and not is_business_participant and os.environ.get("DAT
     except Exception:
         pass
 can_chat = is_customer_owner or is_business_participant
+selected_chat_business_id = str(st.session_state.get("selected_chat_business_id") or "").strip()
 
 vehicle = r.get("vehicle", {}) or {}
 title = f"{vehicle.get('year','')} {vehicle.get('make','')} {vehicle.get('model','')}".strip()
@@ -454,17 +455,20 @@ else:
 
 if can_chat:
     st.subheader("Customer <-> Business chat")
-    st.caption("Discuss the request here before or after estimate acceptance.")
+    st.caption("Messenger-style private 1:1 chats. Each thread is between this customer and one business.")
     if os.environ.get("DATABASE_URL"):
         try:
-            from db import list_request_chat_messages, add_request_chat_message
+            from db import (
+                list_request_chat_messages,
+                add_request_chat_message,
+                list_user_chat_conversations,
+                mark_request_chat_thread_read,
+            )
 
             thread_business_id = None
             thread_business_name = None
             if is_customer_owner:
                 biz_choices = []
-                if bcid:
-                    biz_choices.append((str(bcid), "Assigned business"))
                 if estimate_rows:
                     for e in estimate_rows:
                         bid = str(e.get("business_user_id") or "")
@@ -475,7 +479,10 @@ if can_chat:
                             biz_choices.append((bid, bname))
                 if biz_choices:
                     labels = {bid: name for bid, name in biz_choices}
-                    default_idx = 0
+                    if selected_chat_business_id and selected_chat_business_id in labels:
+                        default_idx = [bid for bid, _ in biz_choices].index(selected_chat_business_id)
+                    else:
+                        default_idx = 0
                     thread_business_id = st.selectbox(
                         "Chat with business",
                         options=[bid for bid, _ in biz_choices],
@@ -484,66 +491,122 @@ if can_chat:
                         key=f"chat_business_pick_{rid}",
                     )
                     thread_business_name = labels.get(thread_business_id)
+                    st.session_state["selected_chat_business_id"] = thread_business_id
                 else:
-                    st.caption("No business is assigned/quoted yet, so private chat is unavailable.")
+                    st.caption("No business quote exists yet, so private chat is unavailable.")
             elif role == ROLE_BUSINESS:
                 thread_business_id = str(user_id)
                 thread_business_name = "your business"
 
-            msgs = list_request_chat_messages(
-                rid,
-                limit=200,
-                viewer_user_id=user_id,
-                viewer_role=role,
-                counterparty_business_user_id=thread_business_id,
-            )
             if thread_business_id:
-                if thread_business_name:
-                    st.caption(f"Private thread with: {thread_business_name}")
-                if msgs:
-                    for m in msgs:
-                        msg_role = (m.get("sender_role") or "user").strip().lower()
-                        msg_name = (m.get("sender_name") or "").strip()
-                        if not msg_name:
-                            if msg_role == ROLE_BUSINESS:
-                                msg_name = "Business"
-                            elif msg_role == ROLE_ADMIN:
-                                msg_name = "Admin"
+                conv_rows = list_user_chat_conversations(user_id, role, limit=200)
+                current_thread_key = f"{str(rid)}::{thread_business_id}"
+                if not any(f"{str(c.get('request_id'))}::{str(c.get('counterparty_business_user_id'))}" == current_thread_key for c in conv_rows):
+                    conv_rows.insert(
+                        0,
+                        {
+                            "request_id": str(rid),
+                            "counterparty_business_user_id": thread_business_id,
+                            "business_name": thread_business_name or "Business",
+                            "customer_name": "Customer",
+                            "latest_message": None,
+                            "latest_message_at": None,
+                            "unread_count": 0,
+                        },
+                    )
+
+                left, right = st.columns([1, 2], gap="small")
+                with left:
+                    st.markdown("**Conversations**")
+                    for c in conv_rows:
+                        c_req = str(c.get("request_id") or "")
+                        c_bid = str(c.get("counterparty_business_user_id") or "")
+                        if not c_req or not c_bid:
+                            continue
+                        is_selected = c_req == str(rid) and c_bid == thread_business_id
+                        label_name = (
+                            (c.get("business_name") if role == ROLE_USER else c.get("customer_name"))
+                            or ("Business" if role == ROLE_USER else "Customer")
+                        )
+                        latest = (c.get("latest_message") or "").strip()
+                        unread_count = int(c.get("unread_count") or 0)
+                        button_label = f"{label_name} | Req {c_req[:8]}"
+                        if unread_count > 0:
+                            button_label += f" ({unread_count})"
+                        if st.button(
+                            button_label,
+                            key=f"conv_pick_{c_req}_{c_bid}",
+                            type="primary" if is_selected else "secondary",
+                            use_container_width=True,
+                        ):
+                            st.session_state["selected_request_id"] = c_req
+                            st.session_state["selected_chat_business_id"] = c_bid
+                            st.rerun()
+                        if latest:
+                            st.caption(latest[:70] + ("..." if len(latest) > 70 else ""))
+
+                msgs = list_request_chat_messages(
+                    rid,
+                    limit=200,
+                    viewer_user_id=user_id,
+                    viewer_role=role,
+                    counterparty_business_user_id=thread_business_id,
+                )
+                _ = mark_request_chat_thread_read(
+                    request_id=rid,
+                    counterparty_business_user_id=thread_business_id,
+                    viewer_user_id=user_id,
+                    viewer_role=role,
+                )
+
+                with right:
+                    if thread_business_name:
+                        st.markdown(f"**Chat with {thread_business_name}**")
+                    if msgs:
+                        for m in msgs:
+                            msg_sender = str(m.get("sender_user_id") or "")
+                            mine = msg_sender == str(user_id)
+                            msg_name = (m.get("sender_name") or "").strip() or ("You" if mine else "Other")
+                            created_at = m.get("created_at")
+                            created_s = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at) if created_at else ""
+                            bubble = "> " + str(m.get("message") or "").strip()
+                            if mine:
+                                st.markdown(
+                                    "<div style='text-align:right'><b>You</b></div>",
+                                    unsafe_allow_html=True,
+                                )
+                                st.info(bubble)
                             else:
-                                msg_name = "Customer"
-                        created_at = m.get("created_at")
-                        created_s = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at) if created_at else ""
-                        with st.container(border=True):
-                            st.markdown(f"**{msg_name}**")
+                                st.markdown(f"**{msg_name}**")
+                                st.write(str(m.get("message") or ""))
                             if created_s:
                                 st.caption(created_s)
-                            st.write(m.get("message") or "")
-                else:
-                    st.caption("No messages yet.")
+                    else:
+                        st.caption("No messages yet.")
 
-                with st.form(f"chat_form_{rid}", clear_on_submit=True):
-                    new_msg = st.text_area("Message", placeholder="Type your message...", height=100)
-                    send_msg = st.form_submit_button("Send")
-                    if send_msg:
-                        sender_label = (
-                            (st.session_state.get("user", {}) or {}).get("fullName")
-                            or (st.session_state.get("user", {}) or {}).get("full_name")
-                            or (st.session_state.get("user", {}) or {}).get("email")
-                            or role.title()
-                        )
-                        out = add_request_chat_message(
-                            request_id=rid,
-                            sender_user_id=user_id,
-                            sender_role=role,
-                            sender_name=sender_label,
-                            message=new_msg,
-                            counterparty_business_user_id=thread_business_id,
-                        )
-                        if out:
-                            st.success("Message sent.")
-                            st.rerun()
-                        else:
-                            st.error("Could not send message. This private thread only allows the selected business and request owner.")
+                    with st.form(f"chat_form_{rid}_{thread_business_id}", clear_on_submit=True):
+                        new_msg = st.text_area("Message", placeholder="Type your message...", height=100)
+                        send_msg = st.form_submit_button("Send")
+                        if send_msg:
+                            sender_label = (
+                                (st.session_state.get("user", {}) or {}).get("fullName")
+                                or (st.session_state.get("user", {}) or {}).get("full_name")
+                                or (st.session_state.get("user", {}) or {}).get("email")
+                                or role.title()
+                            )
+                            out = add_request_chat_message(
+                                request_id=rid,
+                                sender_user_id=user_id,
+                                sender_role=role,
+                                sender_name=sender_label,
+                                message=new_msg,
+                                counterparty_business_user_id=thread_business_id,
+                            )
+                            if out:
+                                st.success("Message sent.")
+                                st.rerun()
+                            else:
+                                st.error("Could not send message. Only this customer and the selected quoted business can use this thread.")
         except Exception as ex:
             st.caption("Chat requires database access: " + str(ex))
             log_bug("request details chat", traceback.format_exc())

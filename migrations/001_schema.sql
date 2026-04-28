@@ -90,11 +90,17 @@ CREATE TABLE IF NOT EXISTS request_chat_messages (
   request_id UUID NOT NULL REFERENCES service_requests(id) ON DELETE CASCADE,
   sender_user_id TEXT,
   sender_role TEXT NOT NULL,
+  counterparty_business_user_id TEXT,
+  receiver_user_id TEXT,
+  is_read BOOLEAN NOT NULL DEFAULT false,
+  read_at TIMESTAMPTZ,
   sender_name TEXT,
   message TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_request_chat_messages_req_created ON request_chat_messages(request_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_request_chat_messages_req_biz_created ON request_chat_messages(request_id, counterparty_business_user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_request_chat_messages_receiver_unread ON request_chat_messages(receiver_user_id, is_read);
 
 CREATE TABLE IF NOT EXISTS request_estimates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
