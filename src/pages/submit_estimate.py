@@ -80,7 +80,7 @@ if submitted:
                 if result:
                     used_db = True
                     st.success("Estimate submitted successfully!")
-                    st.json(estimate_payload)
+                    st.caption("The customer can review this estimate from their request details.")
                 else:
                     st.error("Request not found or could not update estimate.")
                     log_bug("Submit estimate DB", "update_request_estimate returned None")
@@ -100,10 +100,7 @@ if submitted:
 
                 if resp.status_code in (200, 201):
                     st.success("Estimate submitted successfully!")
-                    if "application/json" in resp.headers.get("content-type", ""):
-                        st.json(resp.json())
-                    else:
-                        st.text(resp.text)
+                    st.caption("The customer can review this estimate from their request details.")
 
                 elif resp.status_code == 400:
                     try:

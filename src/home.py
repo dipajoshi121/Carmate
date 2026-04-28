@@ -2,7 +2,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from ui_helpers import mechanic_girl_background_css, get_session_role, ROLE_USER, ROLE_BUSINESS, ROLE_ADMIN
+from ui_helpers import mechanic_girl_background_css, get_session_role, perform_logout, ROLE_USER, ROLE_BUSINESS, ROLE_ADMIN
 
 BASE_DIR = Path(__file__).resolve().parent
 PAGES_DIR = BASE_DIR / "pages"
@@ -25,6 +25,9 @@ if token and qrole == ROLE_BUSINESS:
     st.divider()
     if st.button("Open dashboard", use_container_width=True):
         st.switch_page("pages/business_dashboard.py")
+    if st.button("Log out", use_container_width=True):
+        perform_logout()
+        st.switch_page("home.py")
     st.caption("Use the top menu: Create request, Submit estimate, Upload photos, Profile.")
     st.stop()
 
@@ -35,6 +38,9 @@ if token and qrole == ROLE_USER:
     st.divider()
     if st.button("My requests", use_container_width=True):
         st.switch_page("pages/my_request.py")
+    if st.button("Log out", use_container_width=True):
+        perform_logout()
+        st.switch_page("home.py")
     st.caption("Use the top menu for more actions.")
     st.stop()
 
@@ -50,6 +56,9 @@ if token and qrole == ROLE_ADMIN:
     with a2:
         if st.button("Business portfolio", use_container_width=True):
             st.switch_page("pages/business_dashboard.py")
+    if st.button("Log out", use_container_width=True):
+        perform_logout()
+        st.switch_page("home.py")
     st.caption("Use the top menu for full navigation.")
     st.stop()
 

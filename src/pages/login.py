@@ -50,28 +50,69 @@ intent = (st.session_state.get("login_intent") or ROLE_USER).strip().lower()
 if intent not in (ROLE_USER, ROLE_BUSINESS, ROLE_ADMIN):
     intent = ROLE_USER
 
+intent_options = [ROLE_USER, ROLE_BUSINESS, ROLE_ADMIN]
+intent_labels = {
+    ROLE_USER: "Customer",
+    ROLE_BUSINESS: "Business",
+    ROLE_ADMIN: "Admin",
+}
+intent = st.radio(
+    "Sign in as",
+    options=intent_options,
+    index=intent_options.index(intent),
+    horizontal=True,
+    format_func=lambda role: intent_labels.get(role, role.title()),
+)
+st.session_state["login_intent"] = intent
+
 titles = {
     ROLE_USER: "Customer sign-in",
     ROLE_BUSINESS: "Business sign-in",
     ROLE_ADMIN: "Admin sign-in",
 }
 st.title(titles.get(intent, "Sign in"))
-st.write("Sign in with the account type you selected on the home page.")
+st.write("Sign in with the account type selected above.")
 if intent == ROLE_USER:
     st.caption("Customer accounts can only sign in here—not as business or admin.")
 elif intent == ROLE_BUSINESS:
     st.caption("Business accounts (shop owner) can only sign in here—not as customer or admin.")
 else:
     st.caption("Administrator accounts can only sign in here. Admins can manage customers and businesses from the admin dashboard.")
+    st.caption("Demo admin: username **admin**, password **admin** (or sign in with a real admin email from the database).")
 
 with st.form("login_form", clear_on_submit=False):
-    email = st.text_input("Email", placeholder="e.g., arjun@example.com")
+    if intent == ROLE_ADMIN:
+        email = st.text_input("Username or email", placeholder="admin")
+    else:
+        email = st.text_input("Email", placeholder="e.g., arjun@example.com")
     password = st.text_input("Password", type="password", placeholder="Enter your password")
     submitted = st.form_submit_button("Login")
 
 if submitted:
+    # Built-in demo admin — works with or without DATABASE_URL / backend
+    if intent == ROLE_ADMIN:
+        u_try = (email or "").strip()
+        if u_try.lower() == "admin" and password == "admin":
+            st.session_state["token"] = "dev-admin"
+            st.session_state["user"] = {
+                "id": "dev-admin",
+                "email": "admin@local",
+                "fullName": "Administrator",
+                "phone": "",
+                "isActive": True,
+                "role": ROLE_ADMIN,
+            }
+            st.session_state.pop("login_intent", None)
+            st.switch_page("pages/admin_dashboard.py")
+
     errors = []
-    if not is_valid_email(email):
+    login_input = (email or "").strip()
+    if intent == ROLE_ADMIN:
+        if not login_input:
+            errors.append("Username or email is required.")
+        elif not is_valid_email(login_input) and login_input.lower() != "admin":
+            errors.append("Enter a valid email address, or username **admin** for the demo admin account.")
+    elif not is_valid_email(login_input):
         errors.append("Please enter a valid email address.")
     if not password:
         errors.append("Password is required.")
@@ -80,7 +121,7 @@ if submitted:
         st.error(" | ".join(errors))
         log_bug("Login form validation", " | ".join(errors))
     else:
-        email_clean = email.strip().lower()
+        email_clean = login_input.lower()
         used_db = False
         if os.environ.get("DATABASE_URL"):
             try:

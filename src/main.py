@@ -45,6 +45,7 @@ pages_logged_out = {
         _p("pages/login.py", "Login"),
         _p("pages/register.py", "Register"),
         _p("pages/forgot_password.py", "Forgot Password"),
+        _p("pages/logout.py", "Logout"),
     ],
     "Services": [
         _p("pages/my_request.py", "My Requests"),
@@ -73,6 +74,7 @@ pages_customer = {
         _p("pages/login.py", "Login"),
         _p("pages/register.py", "Register"),
         _p("pages/forgot_password.py", "Forgot Password"),
+        _p("pages/logout.py", "Logout"),
     ],
     "Services": [
         _p("pages/my_request.py", "My Requests"),
@@ -93,6 +95,7 @@ pages_business = {
         _p("pages/login.py", "Login"),
         _p("pages/register.py", "Register"),
         _p("pages/forgot_password.py", "Forgot Password"),
+        _p("pages/logout.py", "Logout"),
     ],
     "Services": [
         _p("pages/service_request.py", "Create Request"),

@@ -18,6 +18,20 @@ def get_session_role() -> str:
     return r
 
 
+def perform_logout():
+    """Clear auth session; best-effort POST to backend when auth is not DB-only."""
+    if not (os.environ.get("DATABASE_URL") or "").strip():
+        try:
+            import requests
+            from config import CFG
+
+            requests.post(f"{CFG.API_BASE}/api/auth/logout", timeout=10)
+        except Exception:
+            pass
+    for k in ("token", "user", "login_intent", "register_intent"):
+        st.session_state.pop(k, None)
+
+
 def sync_session_role_from_db():
     """Align session role with the database so accounts stay tied to their account type."""
     if not os.environ.get("DATABASE_URL"):

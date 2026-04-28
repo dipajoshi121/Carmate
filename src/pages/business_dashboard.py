@@ -45,9 +45,28 @@ except Exception:
     log_bug("Business dashboard", traceback.format_exc())
     st.stop()
 
+def _estimate_status(r: dict) -> str:
+    est = r.get("estimate")
+    if not isinstance(est, dict):
+        return ""
+    return (est.get("status") or "").strip().lower()
+
+
+def _customer_accepted_estimate(r: dict) -> bool:
+    return _estimate_status(r) == "accepted"
+
+
 mine = [r for r in all_req if str(r.get("business_creator_id") or "") == str(uid)]
-st.metric("Requests your business logged", len(mine))
-st.caption(f"Total requests in system: **{len(all_req)}**")
+accepted_reqs = [r for r in all_req if _customer_accepted_estimate(r)]
+other_reqs = [r for r in all_req if not _customer_accepted_estimate(r)]
+
+mx1, mx2, mx3 = st.columns(3)
+with mx1:
+    st.metric("Requests your business logged", len(mine))
+with mx2:
+    st.metric("Total requests in system", len(all_req))
+with mx3:
+    st.metric("Estimates accepted by customers", len(accepted_reqs))
 
 try:
     from db import business_rating_summary
@@ -72,31 +91,54 @@ with c3:
         st.switch_page("pages/upload_vechile_photos.py")
 
 st.divider()
-st.subheader("All service requests")
 
+
+def _request_card(r: dict, button_key_prefix: str):
+    vid = str(r.get("id", ""))
+    vehicle = r.get("vehicle") or {}
+    title = f"{vehicle.get('year', '')} {vehicle.get('make', '')} {vehicle.get('model', '')}".strip()
+    status = r.get("status") or "Pending"
+    service_type = r.get("service_type") or "Service"
+    is_mine = str(r.get("business_creator_id") or "") == str(uid)
+    created_at = r.get("created_at")
+    created_s = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at) if created_at else ""
+    accepted = _customer_accepted_estimate(r)
+
+    with st.container(border=True):
+        if accepted:
+            st.success("Customer accepted the estimate — proceed with the job or payment steps in request details.")
+        st.markdown(f"**{service_type}** — *{status}*")
+        if title:
+            st.write(title)
+        customer_notes = (r.get("description") or "").strip()
+        if customer_notes:
+            st.markdown("**Customer notes**")
+            st.write(customer_notes)
+        if is_mine:
+            st.caption("You created this request")
+        if created_s:
+            st.caption(f"Created: {created_s}")
+        if st.button("Open details", key=f"{button_key_prefix}_{vid}"):
+            st.session_state["selected_request_id"] = vid
+            st.switch_page("pages/request_details.py")
+
+
+st.subheader("Estimates accepted by customers")
 if not all_req:
     st.info("No requests yet.")
+elif not accepted_reqs:
+    st.info("No customers have accepted an estimate yet. Accepted jobs will appear here first.")
 else:
-    for r in all_req:
-        vid = str(r.get("id", ""))
-        vehicle = r.get("vehicle") or {}
-        title = f"{vehicle.get('year', '')} {vehicle.get('make', '')} {vehicle.get('model', '')}".strip()
-        status = r.get("status") or "Pending"
-        service_type = r.get("service_type") or "Service"
-        is_mine = str(r.get("business_creator_id") or "") == str(uid)
-        created_at = r.get("created_at")
-        created_s = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at) if created_at else ""
+    for r in accepted_reqs:
+        _request_card(r, "biz_acc_open")
 
-        with st.container(border=True):
-            st.markdown(f"**{service_type}** — *{status}*")
-            if title:
-                st.write(title)
-            if is_mine:
-                st.caption("You created this request")
-            if created_s:
-                st.caption(f"Created: {created_s}")
-            if st.button("Open details", key=f"biz_open_{vid}"):
-                st.session_state["selected_request_id"] = vid
-                st.switch_page("pages/request_details.py")
+if all_req:
+    st.divider()
+    st.subheader("All other service requests")
+    if not other_reqs:
+        st.caption("No other requests — all current requests have an accepted estimate above.")
+    else:
+        for r in other_reqs:
+            _request_card(r, "biz_open")
 
 render_footer_bug_panel()

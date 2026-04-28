@@ -7,10 +7,9 @@ import requests
 import streamlit as st
 
 from config import CFG
-from ui_helpers import log_bug
+from ui_helpers import log_bug, perform_logout
 
 UPDATE_PROFILE_URL = f"{CFG.API_BASE}/api/auth/updateProfile"
-LOGOUT_URL = f"{CFG.API_BASE}/api/auth/logout"
 
 st.set_page_config(page_title="Carmate - Update Profile", page_icon="", layout="centered")
 
@@ -53,27 +52,9 @@ st.title("Update Your Profile")
 st.write("Update your profile information below.")
 
 if st.button("Logout"):
-    if os.environ.get("DATABASE_URL"):
-        if "token" in st.session_state:
-            del st.session_state["token"]
-        if "user" in st.session_state:
-            del st.session_state["user"]
-        st.success(" Logged out successfully!")
-        st.switch_page("pages/login.py")
-    else:
-        try:
-            resp = requests.post(LOGOUT_URL, timeout=10)
-            if resp.status_code == 200:
-                if "token" in st.session_state:
-                    del st.session_state["token"]
-                if "user" in st.session_state:
-                    del st.session_state["user"]
-                st.success(" Logged out successfully!")
-                st.switch_page("pages/login.py")
-            else:
-                st.error(" Logout failed. Please try again.")
-        except requests.exceptions.RequestException as ex:
-            st.error(" Could not connect to backend. Set DATABASE_URL or start the backend at " + CFG.API_BASE)
+    perform_logout()
+    st.success("Logged out successfully!")
+    st.switch_page("pages/login.py")
 
 display_name = user_data.get("fullName") or user_data.get("full_name") or ""
 with st.form("update_profile_form", clear_on_submit=False):
