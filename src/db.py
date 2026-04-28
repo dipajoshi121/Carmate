@@ -1077,13 +1077,20 @@ def _ensure_request_chat_table(conn):
                    request_id UUID NOT NULL REFERENCES service_requests(id) ON DELETE CASCADE,
                    sender_user_id TEXT,
                    sender_role TEXT NOT NULL,
+                   counterparty_business_user_id TEXT,
                    sender_name TEXT,
                    message TEXT NOT NULL,
                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                )"""
         )
         cur.execute(
+            "ALTER TABLE request_chat_messages ADD COLUMN IF NOT EXISTS counterparty_business_user_id TEXT"
+        )
+        cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_request_chat_messages_req_created ON request_chat_messages(request_id, created_at)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_request_chat_messages_req_biz_created ON request_chat_messages(request_id, counterparty_business_user_id, created_at)"
         )
 
 
@@ -1102,35 +1109,79 @@ def _get_request_chat_participants(conn, request_id: str):
     return str(row.get("user_id") or ""), str(row.get("business_creator_id") or "")
 
 
-def _can_access_request_chat(owner_user_id: str, business_user_id: str, viewer_user_id, viewer_role: str | None) -> bool:
+def _list_request_business_participants(conn, request_id: str, fallback_business_user_id: str):
+    out = set()
+    if fallback_business_user_id:
+        out.add(str(fallback_business_user_id))
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """SELECT business_user_id
+                   FROM request_estimates
+                   WHERE request_id = %s""",
+                (str(request_id),),
+            )
+            for r in cur.fetchall():
+                bid = str(r.get("business_user_id") or "")
+                if bid:
+                    out.add(bid)
+    except Exception:
+        # request_estimates table may not exist yet in older environments.
+        pass
+    return out
+
+
+def _can_access_request_chat(
+    owner_user_id: str,
+    business_participants: set[str],
+    viewer_user_id,
+    viewer_role: str | None,
+) -> bool:
     vuid = str(viewer_user_id or "")
     vrole = (viewer_role or "").strip().lower()
-    # Private chat: only request owner customer or assigned business account.
+    # Private chat: only request owner customer or participating business account.
     if vrole == "user" and owner_user_id and vuid == owner_user_id:
         return True
-    if vrole == "business" and business_user_id and vuid == business_user_id:
+    if vrole == "business" and vuid in business_participants:
         return True
     return False
 
 
-def list_request_chat_messages(request_id: str, limit: int = 200, viewer_user_id=None, viewer_role: str | None = None):
+def list_request_chat_messages(
+    request_id: str,
+    limit: int = 200,
+    viewer_user_id=None,
+    viewer_role: str | None = None,
+    counterparty_business_user_id: str | None = None,
+):
     conn = _conn()
     if not conn:
         return []
     lim = max(1, min(int(limit or 200), 500))
     try:
         _ensure_request_chat_table(conn)
-        owner_uid, biz_uid = _get_request_chat_participants(conn, request_id)
-        if not _can_access_request_chat(owner_uid, biz_uid, viewer_user_id, viewer_role):
+        owner_uid, fallback_biz_uid = _get_request_chat_participants(conn, request_id)
+        biz_participants = _list_request_business_participants(conn, request_id, fallback_biz_uid)
+        if not _can_access_request_chat(owner_uid, biz_participants, viewer_user_id, viewer_role):
+            return []
+        vuid = str(viewer_user_id or "")
+        vrole = (viewer_role or "").strip().lower()
+        if vrole == "business":
+            thread_biz_uid = vuid
+        elif vrole == "user":
+            thread_biz_uid = str(counterparty_business_user_id or "").strip()
+            if thread_biz_uid not in biz_participants:
+                return []
+        else:
             return []
         with _cur(conn) as cur:
             cur.execute(
-                """SELECT id, request_id, sender_user_id, sender_role, sender_name, message, created_at
+                """SELECT id, request_id, sender_user_id, sender_role, counterparty_business_user_id, sender_name, message, created_at
                    FROM request_chat_messages
-                   WHERE request_id = %s
+                   WHERE request_id = %s AND counterparty_business_user_id = %s
                    ORDER BY created_at ASC
                    LIMIT %s""",
-                (str(request_id), lim),
+                (str(request_id), thread_biz_uid, lim),
             )
             return [dict(r) for r in cur.fetchall()]
     except Exception as e:
@@ -1139,7 +1190,14 @@ def list_request_chat_messages(request_id: str, limit: int = 200, viewer_user_id
         conn.close()
 
 
-def add_request_chat_message(request_id: str, sender_user_id, sender_role: str, sender_name: str | None, message: str):
+def add_request_chat_message(
+    request_id: str,
+    sender_user_id,
+    sender_role: str,
+    sender_name: str | None,
+    message: str,
+    counterparty_business_user_id: str | None = None,
+):
     conn = _conn()
     if not conn:
         return None
@@ -1151,18 +1209,29 @@ def add_request_chat_message(request_id: str, sender_user_id, sender_role: str, 
         role = "user"
     try:
         _ensure_request_chat_table(conn)
-        owner_uid, biz_uid = _get_request_chat_participants(conn, request_id)
-        if not _can_access_request_chat(owner_uid, biz_uid, sender_user_id, role):
+        owner_uid, fallback_biz_uid = _get_request_chat_participants(conn, request_id)
+        biz_participants = _list_request_business_participants(conn, request_id, fallback_biz_uid)
+        if not _can_access_request_chat(owner_uid, biz_participants, sender_user_id, role):
+            return None
+        sender_uid = str(sender_user_id or "")
+        if role == "business":
+            thread_biz_uid = sender_uid
+        elif role == "user":
+            thread_biz_uid = str(counterparty_business_user_id or "").strip()
+            if thread_biz_uid not in biz_participants:
+                return None
+        else:
             return None
         with _cur(conn) as cur:
             cur.execute(
-                """INSERT INTO request_chat_messages (request_id, sender_user_id, sender_role, sender_name, message)
-                   VALUES (%s, %s, %s, %s, %s)
-                   RETURNING id, request_id, sender_user_id, sender_role, sender_name, message, created_at""",
+                """INSERT INTO request_chat_messages (request_id, sender_user_id, sender_role, counterparty_business_user_id, sender_name, message)
+                   VALUES (%s, %s, %s, %s, %s, %s)
+                   RETURNING id, request_id, sender_user_id, sender_role, counterparty_business_user_id, sender_name, message, created_at""",
                 (
                     str(request_id),
-                    str(sender_user_id) if sender_user_id else None,
+                    sender_uid if sender_uid else None,
                     role,
+                    thread_biz_uid,
                     (sender_name or "").strip() or None,
                     text,
                 ),

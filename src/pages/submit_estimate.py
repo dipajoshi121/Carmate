@@ -33,6 +33,10 @@ st.write("Submit an estimated cost so the customer knows the expected service co
 
 prefill_rid = st.session_state.get("selected_request_id", "")
 request_id = st.text_input("Service Request ID", value=prefill_rid, placeholder="Paste the request ID here")
+if request_id and request_id.strip():
+    if st.button("Open request chat/details", key="open_chat_from_submit_est"):
+        st.session_state["selected_request_id"] = request_id.strip()
+        st.switch_page("pages/request_details.py")
 
 with st.form("estimate_form", clear_on_submit=False):
     col1, col2 = st.columns(2)
@@ -93,6 +97,9 @@ if submitted:
                     used_db = True
                     st.success("Estimate submitted successfully!")
                     st.caption("The customer can now compare this estimate with other business quotes.")
+                    if st.button("Open request chat", key=f"open_chat_after_submit_db_{req_id_clean}"):
+                        st.session_state["selected_request_id"] = req_id_clean
+                        st.switch_page("pages/request_details.py")
                 else:
                     st.error("Request not found or could not update estimate.")
                     log_bug("Submit estimate DB", "upsert_request_estimate returned None")
@@ -113,6 +120,9 @@ if submitted:
                 if resp.status_code in (200, 201):
                     st.success("Estimate submitted successfully!")
                     st.caption("The customer can review this estimate from their request details.")
+                    if st.button("Open request chat", key=f"open_chat_after_submit_api_{req_id_clean}"):
+                        st.session_state["selected_request_id"] = req_id_clean
+                        st.switch_page("pages/request_details.py")
 
                 elif resp.status_code == 400:
                     try:
