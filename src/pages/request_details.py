@@ -561,8 +561,6 @@ if can_chat:
                             st.session_state["selected_request_id"] = c_req
                             st.session_state["selected_chat_business_id"] = c_bid
                             st.rerun()
-                        if latest:
-                            st.caption(latest[:70] + ("..." if len(latest) > 70 else ""))
 
                 msgs = list_request_chat_messages(
                     rid,
