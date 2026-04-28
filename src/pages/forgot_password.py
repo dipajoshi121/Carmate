@@ -121,6 +121,11 @@ with tab_req:
                     st.error("Database error: " + str(e))
                     st.info("Check DATABASE_URL and run: python run_migration.py")
                     log_bug("Forgot password DB error", str(e))
+                except smtplib.SMTPAuthenticationError:
+                    used_db = True
+                    st.error("SMTP authentication failed. Use a Gmail App Password in SMTP_PASSWORD.")
+                    st.info("Google account must have 2-Step Verification enabled.")
+                    log_bug("Forgot password SMTP auth", "SMTPAuthenticationError")
                 except Exception:
                     used_db = True
                     st.error("Could not send reset email.")
