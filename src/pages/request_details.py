@@ -138,7 +138,7 @@ is_shop_for_request = role == ROLE_BUSINESS and bcid and str(bcid) == str(user_i
 can_submit_estimate = role in (ROLE_BUSINESS, ROLE_ADMIN)
 can_edit_request = role == ROLE_ADMIN or (role == ROLE_BUSINESS and bcid and str(bcid) == str(user_id))
 can_manage_photos = role == ROLE_ADMIN or is_customer_owner or (role == ROLE_BUSINESS and bcid and str(bcid) == str(user_id))
-can_chat = role in (ROLE_BUSINESS, ROLE_ADMIN) or is_customer_owner
+can_chat = is_customer_owner or is_shop_for_request
 
 vehicle = r.get("vehicle", {}) or {}
 title = f"{vehicle.get('year','')} {vehicle.get('make','')} {vehicle.get('model','')}".strip()
@@ -559,6 +559,8 @@ if can_chat:
             log_bug("request details chat", traceback.format_exc())
     else:
         st.caption("Chat is available when DATABASE_URL is configured.")
+elif role in (ROLE_USER, ROLE_BUSINESS):
+    st.caption("Private chat is only available to the request owner and the assigned business.")
 
 if os.environ.get("DATABASE_URL") and user_id:
     try:
