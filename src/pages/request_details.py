@@ -353,6 +353,25 @@ if estimate_rows:
                             st.rerun()
                         else:
                             st.error("Could not reject this estimate.")
+            elif role == ROLE_BUSINESS and str(est.get("business_user_id") or "") == str(user_id):
+                req_is_completed = (status or "").strip().lower() == "completed"
+                est_is_accepted = est_status == "accepted"
+                if est_is_accepted and not req_is_completed:
+                    if st.button("Mark work as completed", key=f"mark_completed_from_quote_{rid}_{est_id}"):
+                        try:
+                            from db import update_service_request_fields
+
+                            out = update_service_request_fields(rid, status="Completed")
+                            if out:
+                                st.success("Job marked as completed.")
+                                st.rerun()
+                            else:
+                                st.error("Could not mark this request as completed.")
+                        except Exception as ex:
+                            st.error("Database error: " + str(ex))
+                            log_bug("mark completed from quotation", str(ex))
+                elif req_is_completed:
+                    st.caption("Work already marked as completed.")
     if accepted_estimate and is_customer_owner:
         st.subheader("Payment (PayPal Sandbox)")
         currency = (accepted_estimate.get("currency") or "USD").upper()
