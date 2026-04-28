@@ -93,6 +93,7 @@ def _job_completed(r: dict) -> bool:
 mine = [r for r in all_req if str(r.get("business_creator_id") or "") == str(uid)]
 accepted_reqs = [r for r in all_req if _customer_accepted_estimate(r)]
 completed_reqs = [r for r in all_req if _job_completed(r)]
+pending_reqs = [r for r in all_req if (r.get("status") or "").strip().lower() == "pending"]
 other_reqs = [r for r in all_req if not _customer_accepted_estimate(r)]
 
 mx1, mx2, mx3, mx4, mx5 = st.columns(5)
@@ -220,6 +221,24 @@ elif not accepted_reqs:
 else:
     for r in accepted_reqs:
         _request_card(r, "biz_acc_open")
+
+if all_req:
+    st.divider()
+    st.subheader("Pending requests")
+    if not pending_reqs:
+        st.caption("No pending requests right now.")
+    else:
+        for r in pending_reqs:
+            _request_card(r, "biz_pending_open")
+
+if all_req:
+    st.divider()
+    st.subheader("Completed requests")
+    if not completed_reqs:
+        st.caption("No completed requests yet.")
+    else:
+        for r in completed_reqs:
+            _request_card(r, "biz_completed_open")
 
 if all_req:
     st.divider()

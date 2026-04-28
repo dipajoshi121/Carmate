@@ -1033,7 +1033,15 @@ def business_rating_summary(business_user_id: str) -> dict | None:
                 """SELECT ROUND(AVG(rr.rating)::numeric, 2) AS avg_rating, COUNT(rr.id)::int AS review_count
                    FROM service_requests sr
                    INNER JOIN request_reviews rr ON rr.request_id = sr.id
-                   WHERE sr.business_creator_id::text = %s""",
+                   LEFT JOIN LATERAL (
+                       SELECT re.business_user_id
+                       FROM request_estimates re
+                       WHERE re.request_id = sr.id
+                         AND LOWER(COALESCE(re.status, '')) = 'accepted'
+                       ORDER BY re.updated_at DESC NULLS LAST, re.created_at DESC NULLS LAST
+                       LIMIT 1
+                   ) acc ON TRUE
+                   WHERE COALESCE(acc.business_user_id, sr.business_creator_id)::text = %s""",
                 (str(business_user_id),),
             )
             row = cur.fetchone()
@@ -1055,16 +1063,73 @@ def list_businesses_with_ratings():
         with _cur(conn) as cur:
             cur.execute(
                 """SELECT u.id, u.email, u.full_name,
-                          ROUND(AVG(rr.rating)::numeric, 2) AS avg_rating,
-                          COUNT(rr.id)::int AS review_count
+                          ROUND(AVG(rb.rating)::numeric, 2) AS avg_rating,
+                          COUNT(rb.review_id)::int AS review_count
                    FROM users u
-                   LEFT JOIN service_requests sr ON sr.business_creator_id = u.id
-                   LEFT JOIN request_reviews rr ON rr.request_id = sr.id
+                   LEFT JOIN (
+                       SELECT
+                           COALESCE(acc.business_user_id, sr.business_creator_id) AS rated_business_id,
+                           rr.id AS review_id,
+                           rr.rating
+                       FROM service_requests sr
+                       INNER JOIN request_reviews rr ON rr.request_id = sr.id
+                       LEFT JOIN LATERAL (
+                           SELECT re.business_user_id
+                           FROM request_estimates re
+                           WHERE re.request_id = sr.id
+                             AND LOWER(COALESCE(re.status, '')) = 'accepted'
+                           ORDER BY re.updated_at DESC NULLS LAST, re.created_at DESC NULLS LAST
+                           LIMIT 1
+                       ) acc ON TRUE
+                       WHERE COALESCE(acc.business_user_id, sr.business_creator_id) IS NOT NULL
+                   ) rb ON rb.rated_business_id = u.id
                    WHERE u.role = 'business'
                    GROUP BY u.id, u.email, u.full_name
                    ORDER BY avg_rating DESC NULLS LAST, u.full_name NULLS LAST"""
             )
             return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def list_reviews_for_business(business_user_id: str, limit: int = 50):
+    conn = _conn()
+    if not conn:
+        return []
+    lim = max(1, min(int(limit or 50), 200))
+    try:
+        with _cur(conn) as cur:
+            cur.execute(
+                """SELECT
+                       rr.id,
+                       rr.request_id,
+                       rr.rating,
+                       rr.comment,
+                       rr.provider_response,
+                       rr.created_at,
+                       COALESCE(rev.full_name, rev.email, 'Customer') AS reviewer_name,
+                       sr.service_type,
+                       sr.vehicle
+                   FROM request_reviews rr
+                   JOIN service_requests sr ON sr.id = rr.request_id
+                   LEFT JOIN users rev ON rev.id = rr.reviewer_user_id
+                   LEFT JOIN LATERAL (
+                       SELECT re.business_user_id
+                       FROM request_estimates re
+                       WHERE re.request_id = sr.id
+                         AND LOWER(COALESCE(re.status, '')) = 'accepted'
+                       ORDER BY re.updated_at DESC NULLS LAST, re.created_at DESC NULLS LAST
+                       LIMIT 1
+                   ) acc ON TRUE
+                   WHERE COALESCE(acc.business_user_id, sr.business_creator_id)::text = %s
+                   ORDER BY rr.created_at DESC
+                   LIMIT %s""",
+                (str(business_user_id), lim),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+            for row in rows:
+                row["vehicle"] = _json(row.get("vehicle"))
+            return rows
     finally:
         conn.close()
 
