@@ -873,3 +873,79 @@ def list_businesses_with_ratings():
             return [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
+
+
+def _ensure_request_chat_table(conn):
+    with _cur(conn, dict_cursor=False) as cur:
+        cur.execute(
+            """CREATE TABLE IF NOT EXISTS request_chat_messages (
+                   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                   request_id UUID NOT NULL REFERENCES service_requests(id) ON DELETE CASCADE,
+                   sender_user_id TEXT,
+                   sender_role TEXT NOT NULL,
+                   sender_name TEXT,
+                   message TEXT NOT NULL,
+                   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+               )"""
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_request_chat_messages_req_created ON request_chat_messages(request_id, created_at)"
+        )
+
+
+def list_request_chat_messages(request_id: str, limit: int = 200):
+    conn = _conn()
+    if not conn:
+        return []
+    lim = max(1, min(int(limit or 200), 500))
+    try:
+        _ensure_request_chat_table(conn)
+        with _cur(conn) as cur:
+            cur.execute(
+                """SELECT id, request_id, sender_user_id, sender_role, sender_name, message, created_at
+                   FROM request_chat_messages
+                   WHERE request_id = %s
+                   ORDER BY created_at ASC
+                   LIMIT %s""",
+                (str(request_id), lim),
+            )
+            return [dict(r) for r in cur.fetchall()]
+    except Exception as e:
+        raise DatabaseError(str(e)) from e
+    finally:
+        conn.close()
+
+
+def add_request_chat_message(request_id: str, sender_user_id, sender_role: str, sender_name: str | None, message: str):
+    conn = _conn()
+    if not conn:
+        return None
+    text = (message or "").strip()
+    if not text:
+        return None
+    role = (sender_role or "user").strip().lower()
+    if role not in ("user", "business", "admin"):
+        role = "user"
+    try:
+        _ensure_request_chat_table(conn)
+        with _cur(conn) as cur:
+            cur.execute(
+                """INSERT INTO request_chat_messages (request_id, sender_user_id, sender_role, sender_name, message)
+                   VALUES (%s, %s, %s, %s, %s)
+                   RETURNING id, request_id, sender_user_id, sender_role, sender_name, message, created_at""",
+                (
+                    str(request_id),
+                    str(sender_user_id) if sender_user_id else None,
+                    role,
+                    (sender_name or "").strip() or None,
+                    text,
+                ),
+            )
+            row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        return None
+    finally:
+        conn.close()

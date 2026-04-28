@@ -56,17 +56,24 @@ def _customer_accepted_estimate(r: dict) -> bool:
     return _estimate_status(r) == "accepted"
 
 
+def _job_completed(r: dict) -> bool:
+    return (r.get("status") or "").strip().lower() == "completed"
+
+
 mine = [r for r in all_req if str(r.get("business_creator_id") or "") == str(uid)]
 accepted_reqs = [r for r in all_req if _customer_accepted_estimate(r)]
+completed_reqs = [r for r in all_req if _job_completed(r)]
 other_reqs = [r for r in all_req if not _customer_accepted_estimate(r)]
 
-mx1, mx2, mx3 = st.columns(3)
+mx1, mx2, mx3, mx4 = st.columns(4)
 with mx1:
     st.metric("Requests your business logged", len(mine))
 with mx2:
     st.metric("Total requests in system", len(all_req))
 with mx3:
     st.metric("Estimates accepted by customers", len(accepted_reqs))
+with mx4:
+    st.metric("Completed jobs", len(completed_reqs))
 
 try:
     from db import business_rating_summary
@@ -105,6 +112,8 @@ def _request_card(r: dict, button_key_prefix: str):
     accepted = _customer_accepted_estimate(r)
 
     with st.container(border=True):
+        if _job_completed(r):
+            st.success("Job completed")
         if accepted:
             st.success("Customer accepted the estimate — proceed with the job or payment steps in request details.")
         st.markdown(f"**{service_type}** — *{status}*")

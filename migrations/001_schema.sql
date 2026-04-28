@@ -84,3 +84,14 @@ CREATE TABLE IF NOT EXISTS payment_webhook_events (
   received_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_payment_webhook_events_event_id ON payment_webhook_events(event_id);
+
+CREATE TABLE IF NOT EXISTS request_chat_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id UUID NOT NULL REFERENCES service_requests(id) ON DELETE CASCADE,
+  sender_user_id TEXT,
+  sender_role TEXT NOT NULL,
+  sender_name TEXT,
+  message TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_request_chat_messages_req_created ON request_chat_messages(request_id, created_at);

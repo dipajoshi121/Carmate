@@ -138,6 +138,7 @@ is_shop_for_request = role == ROLE_BUSINESS and bcid and str(bcid) == str(user_i
 can_submit_estimate = role in (ROLE_BUSINESS, ROLE_ADMIN)
 can_edit_request = role == ROLE_ADMIN or (role == ROLE_BUSINESS and bcid and str(bcid) == str(user_id))
 can_manage_photos = role == ROLE_ADMIN or is_customer_owner or (role == ROLE_BUSINESS and bcid and str(bcid) == str(user_id))
+can_chat = role in (ROLE_BUSINESS, ROLE_ADMIN) or is_customer_owner
 
 vehicle = r.get("vehicle", {}) or {}
 title = f"{vehicle.get('year','')} {vehicle.get('make','')} {vehicle.get('model','')}".strip()
@@ -476,6 +477,63 @@ if estimate:
             st.info("This estimate is already finalized.")
 else:
     st.info("No estimate has been submitted yet.")
+
+if can_chat:
+    st.subheader("Customer <-> Business chat")
+    st.caption("Discuss the request here before or after estimate acceptance.")
+    if os.environ.get("DATABASE_URL"):
+        try:
+            from db import list_request_chat_messages, add_request_chat_message
+
+            msgs = list_request_chat_messages(rid, limit=200)
+            if msgs:
+                for m in msgs:
+                    msg_role = (m.get("sender_role") or "user").strip().lower()
+                    msg_name = (m.get("sender_name") or "").strip()
+                    if not msg_name:
+                        if msg_role == ROLE_BUSINESS:
+                            msg_name = "Business"
+                        elif msg_role == ROLE_ADMIN:
+                            msg_name = "Admin"
+                        else:
+                            msg_name = "Customer"
+                    created_at = m.get("created_at")
+                    created_s = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at) if created_at else ""
+                    with st.container(border=True):
+                        st.markdown(f"**{msg_name}**")
+                        if created_s:
+                            st.caption(created_s)
+                        st.write(m.get("message") or "")
+            else:
+                st.caption("No messages yet.")
+
+            with st.form(f"chat_form_{rid}", clear_on_submit=True):
+                new_msg = st.text_area("Message", placeholder="Type your message...", height=100)
+                send_msg = st.form_submit_button("Send")
+                if send_msg:
+                    sender_label = (
+                        (st.session_state.get("user", {}) or {}).get("fullName")
+                        or (st.session_state.get("user", {}) or {}).get("full_name")
+                        or (st.session_state.get("user", {}) or {}).get("email")
+                        or role.title()
+                    )
+                    out = add_request_chat_message(
+                        request_id=rid,
+                        sender_user_id=user_id,
+                        sender_role=role,
+                        sender_name=sender_label,
+                        message=new_msg,
+                    )
+                    if out:
+                        st.success("Message sent.")
+                        st.rerun()
+                    else:
+                        st.error("Could not send message. Type a message and try again.")
+        except Exception as ex:
+            st.caption("Chat requires database access: " + str(ex))
+            log_bug("request details chat", traceback.format_exc())
+    else:
+        st.caption("Chat is available when DATABASE_URL is configured.")
 
 if os.environ.get("DATABASE_URL") and user_id:
     try:
