@@ -35,6 +35,10 @@ def is_valid_password(pw: str) -> str | None:
     return None
 
 
+def is_valid_reset_code(code: str) -> bool:
+    return bool(re.fullmatch(r"\d{6}", (code or "").strip()))
+
+
 def send_reset_email(to_email: str, token: str) -> bool:
     host = (CFG.SMTP_HOST or "").strip()
     user = (CFG.SMTP_USERNAME or "").strip()
@@ -47,7 +51,7 @@ def send_reset_email(to_email: str, token: str) -> bool:
     msg["From"] = from_email
     msg["To"] = to_email
     msg.set_content(
-        "Use this reset code to update your Carmate password:\n\n"
+        "Use this 6-digit reset code to update your Carmate password:\n\n"
         f"{token}\n\n"
         "If you did not request this change, ignore this email."
     )
@@ -88,7 +92,7 @@ if bg:
     st.markdown(f"<style>{bg}</style>", unsafe_allow_html=True)
 
 st.title("Forgot Password")
-st.write("Request a reset code by email, then verify it to set a new password.")
+st.write("Request a 6-digit reset code by email, then verify it to set a new password.")
 
 tab_req, tab_reset = st.tabs(["1) Send reset code", "2) Verify code & reset"])
 
@@ -162,6 +166,8 @@ with tab_reset:
             errors.append("Please enter a valid email address.")
         if not code:
             errors.append("Reset code is required.")
+        elif not is_valid_reset_code(code):
+            errors.append("Reset code must be exactly 6 digits.")
         pw_err = is_valid_password(new_password)
         if pw_err:
             errors.append(pw_err)

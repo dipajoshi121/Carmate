@@ -178,16 +178,26 @@ def create_password_reset_token(email: str, expires_hours: int = 24) -> str | No
     conn = _conn()
     if not conn:
         return None
-    token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_hours)
     try:
-        with _cur(conn, dict_cursor=False) as cur:
-            cur.execute(
-                "INSERT INTO password_reset_tokens (email, token, expires_at) VALUES (%s, %s, %s)",
-                (email.strip().lower(), token, expires_at),
-            )
-        conn.commit()
-        return token
+        # 6-digit numeric OTP-style reset code.
+        for _ in range(10):
+            token = f"{secrets.randbelow(1_000_000):06d}"
+            try:
+                with _cur(conn, dict_cursor=False) as cur:
+                    cur.execute(
+                        "INSERT INTO password_reset_tokens (email, token, expires_at) VALUES (%s, %s, %s)",
+                        (email.strip().lower(), token, expires_at),
+                    )
+                conn.commit()
+                return token
+            except Exception as ie:
+                conn.rollback()
+                # Retry only on token collision; fail fast for other DB issues.
+                if "duplicate key value" in str(ie).lower():
+                    continue
+                raise
+        raise DatabaseError("Could not allocate unique reset code.")
     except DatabaseError:
         raise
     except Exception as e:
