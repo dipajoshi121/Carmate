@@ -307,16 +307,39 @@ if os.environ.get("DATABASE_URL"):
 if estimate_rows:
     st.subheader("Business estimates")
     accepted_estimate = None
+    business_rating_cache = {}
     for est in estimate_rows:
         est_id = str(est.get("id", ""))
         est_status = (est.get("status") or "submitted").strip().lower()
         if est_status == "accepted":
             accepted_estimate = est
         business_name = (est.get("business_name") or "").strip() or "Business"
+        est_business_uid = str(est.get("business_user_id") or "")
         if str(est.get("business_user_id") or "") == str(user_id):
             business_name += " (you)"
         with st.container(border=True):
             st.markdown(f"**{business_name}** — *{est_status}*")
+            if os.environ.get("DATABASE_URL") and est_business_uid:
+                if est_business_uid not in business_rating_cache:
+                    try:
+                        from db import business_rating_summary
+
+                        business_rating_cache[est_business_uid] = business_rating_summary(est_business_uid)
+                    except Exception:
+                        business_rating_cache[est_business_uid] = None
+                bsum = business_rating_cache.get(est_business_uid) or {}
+                review_count = int(bsum.get("review_count") or 0)
+                avg_rating = bsum.get("avg_rating")
+                if review_count > 0 and avg_rating is not None:
+                    avg_f = float(avg_rating)
+                    stars = min(5, max(1, int(round(avg_f))))
+                    st.caption(
+                        "Business rating: "
+                        + ("★" * stars + "☆" * (5 - stars))
+                        + f" ({avg_f:.2f}/5 from {review_count} review(s))"
+                    )
+                elif is_customer_owner:
+                    st.caption("Business rating: No reviews yet.")
             st.dataframe(
                 {
                     "Line item": ["Labor", "Parts", "Tax", "Fees", "Total"],
